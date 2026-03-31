@@ -162,19 +162,40 @@ class _NavigationScreenState extends State<NavigationScreen> {
           GestureDetector(
             onTap: () => setState(() => currentMode = AppMode.A),
             child: Container(
+              width: 150,
+              padding: const EdgeInsets.symmetric(vertical: 15),
+              alignment: Alignment.center,
               decoration: BoxDecoration(
-                color: currentMode == AppMode.A ? Colors.blue : Colors.grey,
-                borderRadius: BorderRadius.horizontal(left: Radius.circular(20)),
+                color: currentMode == AppMode.A ? Colors.blue : Colors.grey[400],
+                borderRadius: BorderRadius.horizontal(left: Radius.circular(25)),
+
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.15), // Легкая черная тень
+                  blurRadius: 6, // Насколько тень размыта
+                  offset: Offset(0, 3), // Сдвиг тени вниз
+                ),
+              ],
               ),
-              child: Text("A* маршрут", style: TextStyle(color: Colors.white)),
+              child: Text("A* маршрут", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
             ),
           ),
           GestureDetector(
             onTap: () => setState(() => currentMode = AppMode.clustering),
             child: Container(
+              width: 150,
+              padding: const EdgeInsets.symmetric(vertical: 15),
+              alignment: Alignment.center,
               decoration: BoxDecoration(
-                color: currentMode == AppMode.clustering ? Colors.blue : Colors.grey,
-                borderRadius: BorderRadius.horizontal(right: Radius.circular(20)),
+                color: currentMode == AppMode.clustering ? Colors.blue : Colors.grey[400],
+                borderRadius: BorderRadius.horizontal(right: Radius.circular(25)),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.15),
+                    blurRadius: 6,
+                    offset: Offset(0, 3),
+                  ),
+                ],
               ),
               child: Text("Кластеризация", style: TextStyle(color: Colors.white)),
             ),
@@ -184,7 +205,7 @@ class _NavigationScreenState extends State<NavigationScreen> {
       if (currentMode == AppMode.clustering)
         Padding(
           padding: EdgeInsets.all(4),
-          child: Text("Центроидов: ${centroids.length}   [очистить]"),
+          child: Text("Центроидов: ${centroids.length}"),
         ),
         Row(
           mainAxisAlignment: MainAxisAlignment.center,

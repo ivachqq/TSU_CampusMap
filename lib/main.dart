@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'map_data_HD.dart';
 import 'path.dart';
+import 'cluster.dart';
+import 'cafe_data.dart';
 
 enum AppMode { A, clustering }
 void main() => runApp(const TSUApp());

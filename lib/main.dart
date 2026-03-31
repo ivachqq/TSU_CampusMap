@@ -26,7 +26,7 @@ class _MainNavigationState extends State<MainNavigation> {
   int IndexPage = 0;
   final List<Widget> screen = [
     const NavigationScreen(),
-    const Center(child: Text("Тут еда будет")),
+    const FoodScreen(),
     const Center(child: Text("Тут все остальное будет")),
   ];
 
@@ -47,6 +47,162 @@ class _MainNavigationState extends State<MainNavigation> {
     );
   }
 }
+
+
+class FoodScreen extends StatefulWidget {
+  const FoodScreen({super.key});
+  @override
+  State<FoodScreen> createState() => _FoodScreenState();
+}
+
+class _FoodScreenState extends State<FoodScreen> {
+  final TransformationController _transformationController = TransformationController();
+
+  AppMode currentMode = AppMode.A;
+
+  final List<String> dishes = ["Блины", "Кофе", "Сэндвич", "Энергетик", "Полноценный обед"];
+  Set<String> selectedDishes = {};
+
+  @override
+  void initState() {
+    super.initState();
+    double zoom = 2.5;
+    double offsetX = (320 / 1.5) * (1 - zoom);
+    double offsetY = (240 * 1.4) * (1 - zoom);
+    _transformationController.value = Matrix4.identity()
+      ..translate(offsetX, offsetY)
+      ..scale(zoom);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        const SizedBox(height: 10),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            GestureDetector(
+              onTap: () => setState(() => currentMode = AppMode.A),
+              child: Container(
+                width: 150,
+                padding: const EdgeInsets.symmetric(vertical: 15),
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: currentMode == AppMode.A ? Colors.blue : Colors.grey[400],
+                  borderRadius: BorderRadius.horizontal(left: Radius.circular(25)),
+                  boxShadow: [
+                    BoxShadow(color: Colors.black12, blurRadius: 6, offset: Offset(0, 3)),
+                  ],
+                ),
+                child: Text("Маршрут", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              ),
+            ),
+            GestureDetector(
+              onTap: () => setState(() => currentMode = AppMode.clustering),
+              child: Container(
+                width: 150,
+                padding: const EdgeInsets.symmetric(vertical: 15),
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: currentMode == AppMode.clustering ? Colors.blue : Colors.grey[400],
+                  borderRadius: BorderRadius.horizontal(right: Radius.circular(25)),
+                  boxShadow: [
+                    BoxShadow(color: Colors.black12, blurRadius: 6, offset: Offset(0, 3)),
+                  ],
+                ),
+                child: Text("Выбор", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              ),
+            ),
+          ],
+        ),
+
+        Expanded(
+          child: currentMode == AppMode.A
+              ? _buildMapView()
+              : _buildSelectionView(),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSelectionView() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text("Что вы хотите купить?", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 15),
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: dishes.map((dish) {
+              final isSelected = selectedDishes.contains(dish);
+              return FilterChip(
+                label: Text(dish),
+                selected: isSelected,
+                selectedColor: Colors.blue.withOpacity(0.2),
+                checkmarkColor: Colors.blue,
+                onSelected: (bool value) {
+                  setState(() {
+                    if (value) {
+                      selectedDishes.add(dish);
+                    } else {
+                      selectedDishes.remove(dish);
+                    }
+                  });
+                },
+              );
+            }).toList(),
+          ),
+          const Spacer(),
+          Center(
+            child: ElevatedButton(
+              onPressed: selectedDishes.isEmpty ? null : () {
+                setState(() => currentMode = AppMode.A);
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blue,
+                padding: EdgeInsets.symmetric(horizontal: 50, vertical: 15),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+              ),
+              child: Text("РАССЧИТАТЬ ПУТЬ", style: TextStyle(color: Colors.white)),
+            ),
+          ),
+          const SizedBox(height: 30),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMapView() {
+    return InteractiveViewer(
+      transformationController: _transformationController,
+      boundaryMargin: const EdgeInsets.symmetric(vertical: -180, horizontal: 0),
+      minScale: 2.5,
+      maxScale: 8.0,
+      child: FittedBox(
+        fit: BoxFit.contain,
+        child: SizedBox(
+          width: 320,
+          height: 240,
+          child: Stack(
+            children: [
+              Image.asset(
+                'assets/images/MAP.png',
+                width: 320,
+                height: 240,
+                fit: BoxFit.fill,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class NavigationScreen extends StatefulWidget {
   const NavigationScreen({super.key});
   @override
@@ -171,9 +327,9 @@ class _NavigationScreenState extends State<NavigationScreen> {
 
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.15), // Легкая черная тень
-                  blurRadius: 6, // Насколько тень размыта
-                  offset: Offset(0, 3), // Сдвиг тени вниз
+                  color: Colors.black.withOpacity(0.15),
+                  blurRadius: 6,
+                  offset: Offset(0, 3),
                 ),
               ],
               ),
@@ -217,7 +373,7 @@ class _NavigationScreenState extends State<NavigationScreen> {
             child: InteractiveViewer(
 
               transformationController: _transformationController,
-              boundaryMargin: const EdgeInsets.symmetric(vertical: -180, horizontal: 0),// <--- НИКАКИХ ПУСТОТ ПО КРАЯМ
+              boundaryMargin: const EdgeInsets.symmetric(vertical: -180, horizontal: 0),
               minScale: 2.5,
               maxScale: 8.0,
               child: FittedBox(

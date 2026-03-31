@@ -54,6 +54,7 @@ class NavigationScreen extends StatefulWidget {
 }
 
 class _NavigationScreenState extends State<NavigationScreen> {
+  final TransformationController _transformationController = TransformationController();
   AppMode currentMode = AppMode.A;  
   List<Offset> points = [];
   List<Offset> pathPoints = [];
@@ -64,8 +65,18 @@ class _NavigationScreenState extends State<NavigationScreen> {
   int? startGridY;
   
   List<Offset> centroids = [];
-  int k = 3;  
+  int k = 3;
+  @override
+  void initState() {
+    super.initState();
+    double zoom = 2.5;
 
+    double offsetX = (320 / 1.5) * (1 - zoom);
+    double offsetY = (240*1.4) * (1 - zoom);
+    _transformationController.value = Matrix4.identity()
+      ..translate(offsetX, offsetY)
+      ..scale(zoom);
+  }
   void _handleTap(TapDownDetails details, Size mapSize) {
     double x = details.localPosition.dx;
     double y = details.localPosition.dy;
@@ -181,32 +192,30 @@ class _NavigationScreenState extends State<NavigationScreen> {
           children: [Text("Карта Рощи:", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),]
         ),
 
-          Container(
-            margin: const EdgeInsets.fromLTRB(10, 40, 10, 10),
-
-            decoration: BoxDecoration(
-              border: Border.all(
-                color: Colors.blue,
-                width: 2,
-              ),
-              borderRadius: BorderRadius.circular(15),
-              boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 10)],
-            ),
-            clipBehavior: Clip.antiAlias,
+        Expanded(
             child: InteractiveViewer(
-              boundaryMargin: const EdgeInsets.all(10),
-              minScale: 1.0,
+
+              transformationController: _transformationController,
+              boundaryMargin: const EdgeInsets.symmetric(vertical: -180, horizontal: 0),// <--- НИКАКИХ ПУСТОТ ПО КРАЯМ
+              minScale: 2.5,
               maxScale: 8.0,
+              child: FittedBox(
+              fit: BoxFit.contain,
               child: GestureDetector(
                 onTapDown: (details) {
                   _handleTap(details, const Size(320, 240));
                 },
-                child: Stack(
+                child: SizedBox(
+                  width: 320,
+                  height: 240,
+                  child: Stack(
                   children: [
-                    SizedBox(
-                      width: 320, height: 240,
-                      child: Image.asset('assets/images/MAP.png', fit: BoxFit.fill),
-                    ),
+                    Image.asset(
+                    'assets/images/MAP.png',
+                      width: 320,
+                    height: 240,
+                      fit: BoxFit.fill,
+                      ),
                     ...pathPoints.map((p) => Positioned(
                       left: p.dx - 1,
                       top: p.dy - 1,
@@ -245,9 +254,11 @@ class _NavigationScreenState extends State<NavigationScreen> {
               ],
             )
           ),
+              ),
+              ),
+            ),
         ),
-      ),
-    ],
-  );
-}
+      ],
+    );
+  }
 }

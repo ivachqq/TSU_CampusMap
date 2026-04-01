@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'map_data_HD.dart';
 import 'path.dart';
+import 'other_screen.dart';
 
 enum AppMode { A, clustering }
 void main() => runApp(const TSUApp());
@@ -27,7 +28,7 @@ class _MainNavigationState extends State<MainNavigation> {
   final List<Widget> screen = [
     const NavigationScreen(),
     const Center(child: Text("Тут еда будет")),
-    const Center(child: Text("Тут все остальное будет")),
+    const OtherScreen(),
   ];
 
   @override
@@ -69,6 +70,12 @@ class _NavigationScreenState extends State<NavigationScreen> {
   void _handleTap(TapDownDetails details, Size mapSize) {
     double x = details.localPosition.dx;
     double y = details.localPosition.dy;
+
+    /*int gridX = ((x / mapSize.width) * gridW).floor();
+    int gridY = ((y / mapSize.height) * gridH).floor();
+
+    print("Координаты: x=$gridX, y=$gridY");
+    print('MapPoint(name: "Точка", x: $gridX, y: $gridY),');*/ //для вычисления координат
 
     if (currentMode==AppMode.A) {
       int targetX = ((x / mapSize.width) * gridW).floor();

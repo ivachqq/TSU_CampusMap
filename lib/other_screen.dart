@@ -20,25 +20,43 @@ const List<MapPoint> mapPoints = [
   MapPoint(name: "Памятник крылову и Сергиевской", x: 232, y: 127) //координаты неизвестны
 ];
 
-class OtherScreen extends StatelessWidget {
-  const OtherScreen({super.key});
+
+class OtherScreen extends StatefulWidget {
+  final List<MapPoint> selectedPoints;
+  final VoidCallback onChanged;
+  const OtherScreen({Key? key, required this.selectedPoints, required this.onChanged}) : super(key: key);
+
+  @override
+  State<OtherScreen> createState() => _OtherScreenState();
+}
+
+class _OtherScreenState extends State<OtherScreen>{
+  List<MapPoint> selectedPoints = [];
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Text("Здесь будет раздел 'Другое'"),
-          SizedBox(height: 20),
-          ElevatedButton(
-            onPressed: () {
-              print("Нажали кнопку");
-            },
-            child: Text("Нажми меня"),
-          ),
-        ],
-      ),
+    return Column(
+      children: [
+        ExpansionTile(
+          title: Text("Достопримечательности"),
+          children: mapPoints.map((point) {
+            return CheckboxListTile(
+              title: Text(point.name),
+              value: selectedPoints.contains(point),
+              activeColor: Colors.blue,
+              onChanged: (bool? checked) {
+                setState(() {
+                  if (checked == true) {
+                    selectedPoints.add(point);
+                  } else {
+                    selectedPoints.remove(point);
+                  }
+                });
+              },
+            );
+          }).toList(),
+        ),
+      ],
     );
   }
 }

@@ -24,12 +24,24 @@ class MainNavigation extends StatefulWidget {
 }
 
 class _MainNavigationState extends State<MainNavigation> {
+  List<MapPoint> selectedPoints = [];
+
   int IndexPage = 0;
-  final List<Widget> screen = [
-    const NavigationScreen(),
-    const Center(child: Text("Тут еда будет")),
-    const OtherScreen(),
-  ];
+  late List<Widget> screen;
+
+  @override
+  void initState(){
+    super.initState();
+    screen = [
+      NavigationScreen(selectedPoints: selectedPoints),
+      const Center(child: Text("Тут еда будет")),
+      OtherScreen(
+        selectedPoints: selectedPoints,
+        onChanged: () => setState(() {}),
+      ),
+    ];
+  }
+
 
   @override
   Widget build(BuildContext context) {
@@ -42,14 +54,17 @@ class _MainNavigationState extends State<MainNavigation> {
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.map), label: 'Навигация'),
           BottomNavigationBarItem(icon: Icon(Icons.restaurant), label: 'Еда'),
-          BottomNavigationBarItem(icon: Icon(Icons.devices_other), label: 'Остальное'),
+          BottomNavigationBarItem(
+              icon: Icon(Icons.devices_other), label: 'Остальное'),
         ],
       ),
     );
   }
 }
 class NavigationScreen extends StatefulWidget {
-  const NavigationScreen({super.key});
+  //const NavigationScreen({super.key});
+  final List<MapPoint> selectedPoints;
+  const NavigationScreen({Key? key, required this.selectedPoints}) : super(key: key);
   @override
   State<NavigationScreen> createState() => _NavigationScreenState();
 }
@@ -65,7 +80,9 @@ class _NavigationScreenState extends State<NavigationScreen> {
   int? startGridY;
   
   List<Offset> centroids = [];
-  int k = 3;  
+  int k = 3;
+
+
 
   void _handleTap(TapDownDetails details, Size mapSize) {
     double x = details.localPosition.dx;

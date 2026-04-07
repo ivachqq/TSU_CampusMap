@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'map_data_HD.dart';
 import 'path.dart';
 import 'other_screen.dart';
+import 'cluster.dart';
+import 'cafe_data.dart';
 
 enum AppMode { A, clustering }
 void main() => runApp(const TSUApp());
@@ -24,24 +26,12 @@ class MainNavigation extends StatefulWidget {
 }
 
 class _MainNavigationState extends State<MainNavigation> {
-  List<MapPoint> selectedPoints = [];
-
   int IndexPage = 0;
-  late List<Widget> screen;
-
-  @override
-  void initState(){
-    super.initState();
-    screen = [
-      NavigationScreen(selectedPoints: selectedPoints),
-      const Center(child: Text("Тут еда будет")),
-      OtherScreen(
-        selectedPoints: selectedPoints,
-        onChanged: () => setState(() {}),
-      ),
-    ];
-  }
-
+  final List<Widget> screen = [
+    const NavigationScreen(),
+    const Center(child: Text("Тут еда будет")),
+    const Center(child: Text("Тут все остальное будет")),
+  ];
 
   @override
   Widget build(BuildContext context) {
@@ -54,17 +44,14 @@ class _MainNavigationState extends State<MainNavigation> {
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.map), label: 'Навигация'),
           BottomNavigationBarItem(icon: Icon(Icons.restaurant), label: 'Еда'),
-          BottomNavigationBarItem(
-              icon: Icon(Icons.devices_other), label: 'Остальное'),
+          BottomNavigationBarItem(icon: Icon(Icons.devices_other), label: 'Остальное'),
         ],
       ),
     );
   }
 }
 class NavigationScreen extends StatefulWidget {
-  //const NavigationScreen({super.key});
-  final List<MapPoint> selectedPoints;
-  const NavigationScreen({Key? key, required this.selectedPoints}) : super(key: key);
+  const NavigationScreen({super.key});
   @override
   State<NavigationScreen> createState() => _NavigationScreenState();
 }
@@ -81,18 +68,23 @@ class _NavigationScreenState extends State<NavigationScreen> {
   
   List<Offset> centroids = [];
   int k = 3;
-
+  List<Cafe> cafes = List.from(allCafes);
+  bool isClustered = false;
+  final List<Color> clusterColors = [
+  Colors.red,
+  Colors.blue,
+  Colors.green,
+  Colors.orange,
+  Colors.purple,
+  Colors.teal,
+  Colors.pink,
+  Colors.brown,
+];
 
 
   void _handleTap(TapDownDetails details, Size mapSize) {
     double x = details.localPosition.dx;
     double y = details.localPosition.dy;
-
-    /*int gridX = ((x / mapSize.width) * gridW).floor();
-    int gridY = ((y / mapSize.height) * gridH).floor();
-
-    print("Координаты: x=$gridX, y=$gridY");
-    print('MapPoint(name: "Точка", x: $gridX, y: $gridY),');*/ //для вычисления координат
 
     if (currentMode==AppMode.A) {
       int targetX = ((x / mapSize.width) * gridW).floor();
@@ -159,11 +151,72 @@ class _NavigationScreenState extends State<NavigationScreen> {
     }
     else {
       if (x < 0 || x > mapSize.width || y < 0 || y > mapSize.height) return;
+
+      if (isClustered) {
+        ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Сначала очистите результат (кнопка Заново)")),
+        );
+        return;
+      }
       setState(() {
         centroids.add(Offset(x, y));
       });
     }
   }
+
+  void runClustering() {
+  if (centroids.isEmpty) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text("Сначала поставьте центроиды на карте!")),
+    );
+    return;
+  }
+  KMeanClustering kmeans = KMeanClustering();
+  List<Cafe> workingCafes = kmeans.cluster(
+    cafes,
+    centroids,
+    gridW,
+    gridH,
+    320.0,
+    240.0,
+  );
+
+  setState(() {
+    cafes = workingCafes;
+    isClustered = true;
+  });
+
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(content: Text("Кластеризация завершена! ${centroids.length} кластеров")),
+  );
+}
+
+void resetClustering() {
+  setState(() {
+    for (var cafe in cafes) {
+      cafe.clusterId = null;
+    }
+    cafes = List.from(allCafes);
+    centroids.clear();
+    isClustered = false;
+  });
+}
+
+
+Color getCafeColor(Cafe cafe) {
+  if (!isClustered) return Colors.grey;
+  int id = cafe.clusterId ?? 0;
+  return clusterColors[id % clusterColors.length];
+}
+
+double gridToPixelX(int gridX) {
+  return (gridX / gridW) * 320;
+}
+
+double gridToPixelY(int gridY) {
+  return (gridY / gridH) * 240;
+}
+
 
   @override
   Widget build(BuildContext context) {
@@ -196,8 +249,39 @@ class _NavigationScreenState extends State<NavigationScreen> {
       ),
       if (currentMode == AppMode.clustering)
         Padding(
-          padding: EdgeInsets.all(4),
-          child: Text("Центроидов: ${centroids.length}   [очистить]"),
+          padding: const EdgeInsets.all(8),
+          child: Column(
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text("Центроидов: ${centroids.length}"),
+                  const SizedBox(width: 16),
+                  if (!isClustered && centroids.isNotEmpty)
+                    TextButton(
+                      onPressed: () => setState(() => centroids.clear()),
+                      child: const Text("Очистить"),
+                    ),
+                  if (isClustered)
+                    TextButton(
+                      onPressed: resetClustering,
+                      child: const Text("Заново"),
+                    ),
+                ],
+              ),
+              if (!isClustered && centroids.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: ElevatedButton(
+                    onPressed: runClustering,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blue,
+                    ),
+                    child: const Text("Кластеризовать"),
+                  ),
+                ),
+            ],
+          ),
         ),
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -247,6 +331,24 @@ class _NavigationScreenState extends State<NavigationScreen> {
                         decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
                       ),
                 )),
+                if (currentMode == AppMode.clustering && !isClustered)
+                  ...cafes.map((cafe) => Positioned(
+                    left: gridToPixelX(cafe.gridX) - 6,
+                    top: gridToPixelY(cafe.gridY) - 6,
+                    child: Container(
+                      width: 12,
+                      height: 12,
+                      decoration: BoxDecoration(
+                        color: getCafeColor(cafe),
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.white, width: 1.5),
+                      ),
+                      child: Tooltip(
+                        message: cafe.name,
+                        child: const SizedBox.expand(),
+                      ),
+                    ),
+                  )),
                 if (currentMode == AppMode.clustering)
                   ...centroids.asMap().entries.map((entry) => Positioned(
                     left: entry.value.dx - 8,
@@ -266,6 +368,35 @@ class _NavigationScreenState extends State<NavigationScreen> {
                       ),
                     ),
                   )),
+                  if (currentMode == AppMode.clustering && isClustered)
+                  ...List.generate(centroids.length, (index) {
+                    List<Cafe> clusterCafes = cafes.where((c) => c.clusterId == index).toList();
+                    if (clusterCafes.isEmpty) return const SizedBox();
+                    double sumX = 0;
+                    double sumY = 0;
+                    for (var cafe in clusterCafes) {
+                      sumX += cafe.gridX;
+                      sumY += cafe.gridY;
+                    }
+                    double centerX = (sumX / clusterCafes.length) / gridW * 320;
+                    double centerY = (sumY / clusterCafes.length) / gridH * 240;
+                    return Positioned(
+                      left: centerX - 10,
+                      top: centerY - 10,
+                      child: Container(
+                        width: 20,
+                        height: 20,
+                        decoration: BoxDecoration(
+                          color: clusterColors[index % clusterColors.length],
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.white, width: 2),
+                        ),
+                        child: const Center(
+                          child: Icon(Icons.star, color: Colors.white, size: 12),
+                        ),
+                      ),
+                    );
+                  }),
               ],
             )
           ),

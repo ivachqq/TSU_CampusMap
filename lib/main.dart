@@ -4,6 +4,7 @@ import 'path.dart';
 import 'other_screen.dart';
 import 'cluster.dart';
 import 'cafe_data.dart';
+import 'ant_algoritm.dart';
 
 enum AppMode { A, clustering }
 void main() => runApp(const TSUApp());
@@ -27,14 +28,19 @@ class MainNavigation extends StatefulWidget {
 
 class _MainNavigationState extends State<MainNavigation> {
   int IndexPage = 0;
-  final List<Widget> screen = [
-    const NavigationScreen(),
-    const Center(child: Text("Тут еда будет")),
-    const Center(child: Text("Тут все остальное будет")),
-  ];
+  final List<MapPoint> _selectedPoints = [];
+  void _handleUpdate(){
+    setState((){});
+  }
+
 
   @override
   Widget build(BuildContext context) {
+    final List<Widget> screen = [
+      NavigationScreen(selectedPoints: _selectedPoints),
+      const Center(child: Text("Тут еда будет")),
+      OtherScreen(selectedPoints: _selectedPoints, onChanged: _handleUpdate),
+    ];
     return Scaffold(
       appBar: AppBar(title: const Text("TSU map")),
       body: screen[IndexPage],
@@ -51,7 +57,8 @@ class _MainNavigationState extends State<MainNavigation> {
   }
 }
 class NavigationScreen extends StatefulWidget {
-  const NavigationScreen({super.key});
+  final List<MapPoint> selectedPoints;
+  const NavigationScreen({super.key, required this.selectedPoints});
   @override
   State<NavigationScreen> createState() => _NavigationScreenState();
 }
@@ -322,7 +329,12 @@ double gridToPixelY(int gridY) {
                         width: 2, height: 2,
                         decoration: const BoxDecoration(color: Colors.blue, shape: BoxShape.circle),
                       ),
-                    )),
+                    )).toList(),
+                    SelectedPointsLayer(
+                      selectedPoints: widget.selectedPoints,
+                      gridW: gridW,
+                      gridH: gridH,
+                    ),
                     ...points.map((p) => Positioned(
                       left: p.dx - 2,
                       top: p.dy - 2,

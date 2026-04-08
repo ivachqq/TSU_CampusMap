@@ -31,7 +31,6 @@ class OtherScreen extends StatefulWidget {
 }
 
 class _OtherScreenState extends State<OtherScreen>{
-  List<MapPoint> selectedPoints = [];
 
   @override
   Widget build(BuildContext context) {
@@ -42,14 +41,14 @@ class _OtherScreenState extends State<OtherScreen>{
           children: mapPoints.map((point) {
             return CheckboxListTile(
               title: Text(point.name),
-              value: selectedPoints.contains(point),
+              value: widget.selectedPoints.contains(point),
               activeColor: Colors.blue,
               onChanged: (bool? checked) {
                 setState(() {
                   if (checked == true) {
-                    selectedPoints.add(point);
+                    widget.selectedPoints.add(point);
                   } else {
-                    selectedPoints.remove(point);
+                    widget.selectedPoints.remove(point);
                   }
                 });
               },

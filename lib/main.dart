@@ -31,6 +31,7 @@ class _MainNavigationState extends State<MainNavigation> {
   int IndexPage = 0;
   List<Offset> pathPoints = [];
   final List<MapPoint> _selectedPoints = [];
+  
   void _handleUpdate() {
     setState(() {});
   }
@@ -54,21 +55,21 @@ class _MainNavigationState extends State<MainNavigation> {
         )));
       }
 
-        this.pathPoints = fullPath;
-        IndexPage = 0;
-      });
-    }
-
+      this.pathPoints = fullPath;
+      IndexPage = 0;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     final List<Widget> screen = [
       NavigationScreen(selectedPoints: _selectedPoints, pathPoints: pathPoints),
-      const Center(child: Text("Тут еда будет")),
-       OtherScreen(
-           selectedPoints: _selectedPoints,
-           onChanged: _handleUpdate,
-           buildOptimizedRoute: _buildOptimizedRoute)
+      const FoodScreen(), // ← вернули FoodScreen
+      OtherScreen(
+        selectedPoints: _selectedPoints,
+        onChanged: _handleUpdate,
+        buildOptimizedRoute: _buildOptimizedRoute,
+      ),
     ];
     return Scaffold(
       appBar: AppBar(title: const Text("TSU map")),
@@ -85,6 +86,304 @@ class _MainNavigationState extends State<MainNavigation> {
     );
   }
 }
+
+
+class FoodScreen extends StatefulWidget {
+  const FoodScreen({super.key});
+  @override
+  State<FoodScreen> createState() => _FoodScreenState();
+}
+
+class FoodPlace {
+  final String name;
+  final Offset pos;
+  final List<String> menu;
+  final int closeHour;
+
+  FoodPlace(this.name, this.pos, this.menu, this.closeHour);
+}
+
+final List<FoodPlace> roshaPlaces = [
+  FoodPlace("СибБлины", const Offset(135, 140), ["Блины", "Обед"], 20),
+  FoodPlace("Starbucks", const Offset(133, 120), ["Кофе"], 22),
+  FoodPlace("Ярче", const Offset(305, 40), ["Посуда", "Сэндвич"], 20),
+  FoodPlace("ГК ТГУ", const Offset(255, 60), ["Обед"], 16),
+  FoodPlace("Магнит", const Offset(50, 76), ["Энергетик"], 22),
+];
+
+class _FoodScreenState extends State<FoodScreen> {
+  final TransformationController _transformationController = TransformationController();
+
+  AppMode currentMode = AppMode.clustering;
+
+  final List<String> dishes = ["Блины", "Кофе", "Посуда", "Сэндвич", "Обед", "Энергетик"];
+  Set<String> selectedDishes = {};
+
+  bool isCalculating = false;
+  List<Offset> gaRoute = [];
+
+  @override
+  void initState() {
+    super.initState();
+    double zoom = 2.5;
+    double offsetX = (320 / 1.5) * (1 - zoom);
+    double offsetY = (240 * 1.4) * (1 - zoom);
+    _transformationController.value = Matrix4.identity()
+      ..translate(offsetX, offsetY)
+      ..scale(zoom);
+  }
+
+  Future<void> runGeneticAlgorithm() async {
+    setState(() {
+      currentMode = AppMode.A;
+      isCalculating = true;
+      gaRoute.clear();
+    });
+
+    Offset startPos = const Offset(135, 170);
+
+    List<FoodPlace> targets = roshaPlaces.where((p) {
+      return p.menu.any((item) => selectedDishes.contains(item));
+    }).toList();
+
+    int generations = 40;
+
+    for (int g = 0; g < generations; g++) {
+      //targets.shuffle();
+      List<Offset> rawWaypoints = [startPos, ...targets.map((e) => e.pos)];
+
+      List<Offset> realPath = _buildFullPath(rawWaypoints);
+
+      setState(() {
+        gaRoute = realPath;
+      });
+
+      await Future.delayed(const Duration(milliseconds: 50));
+    }
+
+    setState(() {
+      isCalculating = false;
+    });
+  }
+  Offset? _getNearestRoad(int targetX, int targetY, int gridW, int gridH) {
+    int? finalX;
+    int? finalY;
+    double minDistance = 999;
+
+    for (int dy = -2; dy <= 2; dy++) {
+      for (int dx = -2; dx <= 2; dx++) {
+        int checkX = targetX + dx;
+        int checkY = targetY + dy;
+
+        if (checkX >= 0 && checkX < gridW && checkY >= 0 && checkY < gridH) {
+          int index = checkY * gridW + checkX;
+          if (RoshaMap.grid[index] == 0) { // 0 - это дорога
+            double dist = (dx * dx + dy * dy).toDouble();
+            if (dist < minDistance) {
+              minDistance = dist;
+              finalX = checkX;
+              finalY = checkY;
+            }
+          }
+        }
+      }
+    }
+    if (finalX != null && finalY != null) return Offset(finalX.toDouble(), finalY.toDouble());
+    return null;
+  }
+
+  List<Offset> _buildFullPath(List<Offset> waypoints) {
+    List<Offset> fullRoute = [];
+
+    final int gridW = RoshaMap.width;
+    final int gridH = RoshaMap.height;
+    final double mapWidth = 320.0;
+    final double mapHeight = 240.0;
+
+    for (int i = 0; i < waypoints.length - 1; i++) {
+      Offset start = waypoints[i];
+      Offset goal = waypoints[i + 1];
+
+
+      int startX = ((start.dx / mapWidth) * gridW).floor();
+      int startY = ((start.dy / mapHeight) * gridH).floor();
+      int goalX = ((goal.dx / mapWidth) * gridW).floor();
+      int goalY = ((goal.dy / mapHeight) * gridH).floor();
+
+      Offset? validStart = _getNearestRoad(startX, startY, gridW, gridH);
+      Offset? validGoal = _getNearestRoad(goalX, goalY, gridW, gridH);
+
+      List<Offset> segment = [];
+
+      if (validStart != null && validGoal != null) {
+        List<Offset> gridPath = AStarSolver.findPath(
+            validStart.dx.toInt(), validStart.dy.toInt(),
+            validGoal.dx.toInt(), validGoal.dy.toInt()
+        );
+
+        if (gridPath.isNotEmpty) {
+
+          segment = gridPath.map((p) => Offset(
+            (p.dx / gridW) * mapWidth,
+            (p.dy / gridH) * mapHeight,
+          )).toList();
+        }
+      }
+
+      if (segment.isNotEmpty) {
+        fullRoute.add(start);
+
+        if (fullRoute.length > 1) segment.removeAt(0);
+        fullRoute.addAll(segment);
+
+        fullRoute.add(goal);
+      } else {
+        fullRoute.add(start);
+        fullRoute.add(goal);
+      }
+    }
+
+    return fullRoute;
+  }
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        const SizedBox(height: 10),
+
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            GestureDetector(
+              onTap: () => setState(() => currentMode = AppMode.A),
+              child: Container(
+                width: 150,
+                padding: const EdgeInsets.symmetric(vertical: 15),
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: currentMode == AppMode.A ? Colors.blue : Colors.grey[400],
+                  borderRadius: const BorderRadius.horizontal(left: Radius.circular(25)),
+                ),
+                child: const Text("Карта", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              ),
+            ),
+            GestureDetector(
+              onTap: () => setState(() => currentMode = AppMode.clustering),
+              child: Container(
+                width: 150,
+                padding: const EdgeInsets.symmetric(vertical: 15),
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: currentMode == AppMode.clustering ? Colors.blue : Colors.grey[400],
+                  borderRadius: const BorderRadius.horizontal(right: Radius.circular(25)),
+                ),
+                child: const Text("Выбор еды", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              ),
+            ),
+          ],
+        ),
+
+        const SizedBox(height: 20),
+        Expanded(
+          child: currentMode == AppMode.A ? _buildMapView() : _buildSelectionView(),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSelectionView() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text("Что вы хотите купить?", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 15),
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: dishes.map((dish) {
+              final isSelected = selectedDishes.contains(dish);
+              return FilterChip(
+                label: Text(dish),
+                selected: isSelected,
+                selectedColor: Colors.blue.withOpacity(0.2),
+                checkmarkColor: Colors.blue,
+                onSelected: (bool value) {
+                  setState(() {
+                    value ? selectedDishes.add(dish) : selectedDishes.remove(dish);
+                  });
+                },
+              );
+            }).toList(),
+          ),
+          const Spacer(),
+          Center(
+            child: ElevatedButton(
+              onPressed: selectedDishes.isEmpty || isCalculating ? null : runGeneticAlgorithm,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blue,
+                padding: const EdgeInsets.symmetric(horizontal: 50, vertical: 15),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+              ),
+              child: isCalculating
+                  ? const CircularProgressIndicator(color: Colors.white)
+                  : const Text("РАССЧИТАТЬ ПУТЬ", style: TextStyle(color: Colors.white)),
+            ),
+          ),
+          const SizedBox(height: 30),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMapView() {
+    return InteractiveViewer(
+      transformationController: _transformationController,
+      boundaryMargin: const EdgeInsets.symmetric(vertical: 200, horizontal: 200),
+      minScale: 2.5,
+      maxScale: 8.0,
+      child: FittedBox(
+        fit: BoxFit.contain,
+        child: SizedBox(
+          width: 320,
+          height: 240,
+          child: Stack(
+            children: [
+              Image.asset(
+                'assets/images/MAP.png',
+                width: 320,
+                height: 240,
+                fit: BoxFit.fill,
+              ),
+              CustomPaint(
+                size: const Size(320, 240),
+                painter: PathPainter(gaRoute, color: Colors.orange),
+              ),
+              ...roshaPlaces.map((p) => Positioned(
+                left: p.pos.dx - 3,
+                top: p.pos.dy - 3,
+                child: Container(
+                  width: 6, height: 6,
+                  decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
+                ),
+              )),
+              if (gaRoute.isNotEmpty)
+                Positioned(
+                  left: gaRoute.first.dx - 4,
+                  top: gaRoute.first.dy - 4,
+                  child: Container(
+                    width: 8, height: 8,
+                    decoration: const BoxDecoration(color: Colors.green, shape: BoxShape.circle),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
 class NavigationScreen extends StatefulWidget {
   final List<MapPoint> selectedPoints;
   final List<Offset> pathPoints;
@@ -94,6 +393,7 @@ class NavigationScreen extends StatefulWidget {
 }
 
 class _NavigationScreenState extends State<NavigationScreen> {
+  final TransformationController _transformationController = TransformationController();
   AppMode currentMode = AppMode.A;  
   List<Offset> points = [];
   List<Offset> pathPoints = [];
@@ -115,10 +415,25 @@ class _NavigationScreenState extends State<NavigationScreen> {
   Colors.purple,
   Colors.teal,
   Colors.pink,
-  Colors.brown,
-];
+  Colors.brown,];
+
+  @override
+  void initState() {
+    super.initState();
+    double zoom = 2.5;
+
+  int k = 3;  
+  List<Cafe> cafes = List.from(allCafes);
+  bool isClustered = false;  
+  final List<Color> clusterColors = [];
 
 
+    double offsetX = (320 / 1.5) * (1 - zoom);
+    double offsetY = (240*1.4) * (1 - zoom);
+    _transformationController.value = Matrix4.identity()
+      ..translate(offsetX, offsetY)
+      ..scale(zoom);
+  }
   void _handleTap(TapDownDetails details, Size mapSize) {
     double x = details.localPosition.dx;
     double y = details.localPosition.dy;
@@ -271,19 +586,40 @@ double gridToPixelY(int gridY) {
           GestureDetector(
             onTap: () => setState(() => currentMode = AppMode.A),
             child: Container(
+              width: 150,
+              padding: const EdgeInsets.symmetric(vertical: 15),
+              alignment: Alignment.center,
               decoration: BoxDecoration(
-                color: currentMode == AppMode.A ? Colors.blue : Colors.grey,
-                borderRadius: BorderRadius.horizontal(left: Radius.circular(20)),
+                color: currentMode == AppMode.A ? Colors.blue : Colors.grey[400],
+                borderRadius: BorderRadius.horizontal(left: Radius.circular(25)),
+
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.15),
+                  blurRadius: 6,
+                  offset: Offset(0, 3),
+                ),
+              ],
               ),
-              child: Text("A* маршрут", style: TextStyle(color: Colors.white)),
+              child: Text("A* маршрут", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
             ),
           ),
           GestureDetector(
             onTap: () => setState(() => currentMode = AppMode.clustering),
             child: Container(
+              width: 150,
+              padding: const EdgeInsets.symmetric(vertical: 15),
+              alignment: Alignment.center,
               decoration: BoxDecoration(
-                color: currentMode == AppMode.clustering ? Colors.blue : Colors.grey,
-                borderRadius: BorderRadius.horizontal(right: Radius.circular(20)),
+                color: currentMode == AppMode.clustering ? Colors.blue : Colors.grey[400],
+                borderRadius: BorderRadius.horizontal(right: Radius.circular(25)),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.15),
+                    blurRadius: 6,
+                    offset: Offset(0, 3),
+                  ),
+                ],
               ),
               child: Text("Кластеризация", style: TextStyle(color: Colors.white)),
             ),
@@ -325,6 +661,7 @@ double gridToPixelY(int gridY) {
                 ),
             ],
           ),
+
         ),
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -332,27 +669,23 @@ double gridToPixelY(int gridY) {
           children: [Text("Карта Рощи:", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),]
         ),
 
-          Container(
-            margin: const EdgeInsets.fromLTRB(10, 40, 10, 10),
-
-            decoration: BoxDecoration(
-              border: Border.all(
-                color: Colors.blue,
-                width: 2,
-              ),
-              borderRadius: BorderRadius.circular(15),
-              boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 10)],
-            ),
-            clipBehavior: Clip.antiAlias,
+        Expanded(
             child: InteractiveViewer(
-              boundaryMargin: const EdgeInsets.all(10),
-              minScale: 1.0,
+
+              transformationController: _transformationController,
+              boundaryMargin: const EdgeInsets.symmetric(vertical: 200, horizontal: 200),
+              minScale: 2.5,
               maxScale: 8.0,
+              child: FittedBox(
+              fit: BoxFit.contain,
               child: GestureDetector(
                 onTapDown: (details) {
                   _handleTap(details, const Size(320, 240));
                 },
-                child: Stack(
+                child: SizedBox(
+                  width: 320,
+                  height: 240,
+                  child: Stack(
                   children: [
                     SizedBox(
                       width: 320, height: 240,
@@ -366,6 +699,10 @@ double gridToPixelY(int gridY) {
                         decoration: const BoxDecoration(color: Colors.blue, shape: BoxShape.circle),
                       ),
                     )).toList(),
+                    CustomPaint(
+                      size: const Size(320, 240),
+                      painter: PathPainter(pathPoints),
+                    ),
                     SelectedPointsLayer(
                       selectedPoints: widget.selectedPoints,
                       gridW: gridW,
@@ -448,9 +785,41 @@ double gridToPixelY(int gridY) {
               ],
             )
           ),
+              ),
+              ),
+            ),
         ),
-      ),
-    ],
-  );
+      ],
+    );
+  }
 }
+class PathPainter extends CustomPainter {
+  final List<Offset> path;
+  final Color color;
+
+  PathPainter(this.path, {this.color = Colors.blue});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (path.isEmpty) return;
+
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = 4.0
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+
+    final pathObj = Path();
+    pathObj.moveTo(path.first.dx, path.first.dy);
+
+    for (int i = 1; i < path.length; i++) {
+      pathObj.lineTo(path[i].dx, path[i].dy);
+    }
+
+    canvas.drawPath(pathObj, paint);
+  }
+
+  @override
+  bool shouldRepaint(PathPainter oldDelegate) => oldDelegate.path != path;
 }

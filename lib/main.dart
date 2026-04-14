@@ -303,7 +303,7 @@ class _FoodScreenState extends State<FoodScreen> {
   Widget _buildMapView() {
     return InteractiveViewer(
       transformationController: _transformationController,
-      boundaryMargin: const EdgeInsets.symmetric(vertical: -180, horizontal: 0),
+      boundaryMargin: const EdgeInsets.symmetric(vertical: 200, horizontal: 200),
       minScale: 2.5,
       maxScale: 8.0,
       child: FittedBox(
@@ -629,7 +629,7 @@ double gridToPixelY(int gridY) {
             child: InteractiveViewer(
 
               transformationController: _transformationController,
-              boundaryMargin: const EdgeInsets.symmetric(vertical: -180, horizontal: 0),
+              boundaryMargin: const EdgeInsets.symmetric(vertical: 200, horizontal: 200),
               minScale: 2.5,
               maxScale: 8.0,
               child: FittedBox(

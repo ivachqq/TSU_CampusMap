@@ -4,6 +4,7 @@ import 'path.dart';
 import 'other_screen.dart';
 import 'cluster.dart';
 import 'cafe_data.dart';
+import 'drow_points.dart';
 import 'ant_algoritm.dart';
 
 enum AppMode { A, clustering }
@@ -28,18 +29,46 @@ class MainNavigation extends StatefulWidget {
 
 class _MainNavigationState extends State<MainNavigation> {
   int IndexPage = 0;
+  List<Offset> pathPoints = [];
   final List<MapPoint> _selectedPoints = [];
-  void _handleUpdate(){
-    setState((){});
+  void _handleUpdate() {
+    setState(() {});
   }
+
+  void _buildOptimizedRoute() {
+    if (_selectedPoints.length < 2) return;
+
+    setState(() {
+      List<MapPoint> optimizedPoints = AntSolver.solveACO(_selectedPoints);
+
+      List<Offset> fullPath = [];
+      for (int i = 0; i < optimizedPoints.length - 1; i++) {
+        var segment = AStarSolver.findPath(
+          optimizedPoints[i].x, optimizedPoints[i].y,
+          optimizedPoints[i + 1].x, optimizedPoints[i + 1].y,
+        );
+
+        fullPath.addAll(segment.map((p) => Offset(
+          (p.dx / RoshaMap.width) * 320,
+          (p.dy / RoshaMap.height) * 240,
+        )));
+      }
+
+        this.pathPoints = fullPath;
+        IndexPage = 0;
+      });
+    }
 
 
   @override
   Widget build(BuildContext context) {
     final List<Widget> screen = [
-      NavigationScreen(selectedPoints: _selectedPoints),
+      NavigationScreen(selectedPoints: _selectedPoints, pathPoints: pathPoints),
       const Center(child: Text("Тут еда будет")),
-      OtherScreen(selectedPoints: _selectedPoints, onChanged: _handleUpdate),
+       OtherScreen(
+           selectedPoints: _selectedPoints,
+           onChanged: _handleUpdate,
+           buildOptimizedRoute: _buildOptimizedRoute)
     ];
     return Scaffold(
       appBar: AppBar(title: const Text("TSU map")),
@@ -58,7 +87,8 @@ class _MainNavigationState extends State<MainNavigation> {
 }
 class NavigationScreen extends StatefulWidget {
   final List<MapPoint> selectedPoints;
-  const NavigationScreen({super.key, required this.selectedPoints});
+  final List<Offset> pathPoints;
+  const NavigationScreen({super.key, required this.selectedPoints, required this.pathPoints});
   @override
   State<NavigationScreen> createState() => _NavigationScreenState();
 }
@@ -92,6 +122,12 @@ class _NavigationScreenState extends State<NavigationScreen> {
   void _handleTap(TapDownDetails details, Size mapSize) {
     double x = details.localPosition.dx;
     double y = details.localPosition.dy;
+
+    //для поиска коотрдинат точек на карте
+
+    int targetX = ((x / mapSize.width) * gridW).floor();
+    int targetY = ((y / mapSize.height) * gridH).floor();
+    print('Точка, х: $targetX, y: $targetY');
 
     if (currentMode==AppMode.A) {
       int targetX = ((x / mapSize.width) * gridW).floor();
@@ -322,7 +358,7 @@ double gridToPixelY(int gridY) {
                       width: 320, height: 240,
                       child: Image.asset('assets/images/MAP.png', fit: BoxFit.fill),
                     ),
-                    ...pathPoints.map((p) => Positioned(
+                    ...widget.pathPoints.map((p) => Positioned(
                       left: p.dx - 1,
                       top: p.dy - 1,
                       child: Container(

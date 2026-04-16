@@ -529,6 +529,12 @@ class _NavigationScreenState extends State<NavigationScreen> {
     );
     return;
   }
+  if (centroids.length > allCafes.length) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text("Количество центроидов превышает количество кафе! Переделайте центроиды!")),
+    );
+    return;
+  }
   KMeanClustering kmeans = KMeanClustering();
   List<Cafe> workingCafes = kmeans.cluster(
     cafes,

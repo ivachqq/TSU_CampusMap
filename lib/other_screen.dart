@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'ant_algoritm.dart';
+import 'rating_draw_screen.dart';
 
 class MapPoint {
   final String name;
@@ -57,12 +58,41 @@ class _OtherScreenState extends State<OtherScreen>{
             );
           }).toList(),
         ),
+
         ElevatedButton(
           onPressed: widget.selectedPoints.length > 1 ? () {
             widget.buildOptimizedRoute();
           }: null,
           child: Text("Построить маршрут"),
-        )
+        ),
+        Container(
+          decoration: BoxDecoration(
+            border: Border(
+              bottom: BorderSide(color: Colors.grey.shade300),
+            ),
+          ),
+          child: ListTile(
+            title: Text(
+              "Оставить оценку заведению",
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            trailing: Icon(Icons.arrow_forward_ios, size: 16),
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const RatingDrawScreen(),
+                ),
+              );
+            },
+          ),
+        ),
+        
+        const SizedBox(height: 16),
+        
       ],
     );
   }

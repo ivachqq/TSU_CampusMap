@@ -482,7 +482,9 @@ class _NavigationScreenState extends State<NavigationScreen> {
   Colors.teal,
   Colors.pink,
   Colors.brown,];
-
+  bool _isDragging = false;
+  Offset? _tapDownPosition;
+  static const double _dragThreshold = 8.0;
   @override
   void initState() {
     super.initState();
@@ -500,91 +502,87 @@ class _NavigationScreenState extends State<NavigationScreen> {
       ..translate(offsetX, offsetY)
       ..scale(zoom);
   }
-  void _handleTap(TapDownDetails details, Size mapSize) {
-    double x = details.localPosition.dx;
-    double y = details.localPosition.dy;
+  void _handleTapFromPosition(Offset localPosition, Size mapSize) {
+  double x = localPosition.dx;
+  double y = localPosition.dy;
 
-    //для поиска коотрдинат точек на карте
+  int targetX = ((x / mapSize.width) * gridW).floor();
+  int targetY = ((y / mapSize.height) * gridH).floor();
+  print('Точка, х: $targetX, y: $targetY');
 
+  if (currentMode == AppMode.A) {
     int targetX = ((x / mapSize.width) * gridW).floor();
     int targetY = ((y / mapSize.height) * gridH).floor();
-    print('Точка, х: $targetX, y: $targetY');
 
-    if (currentMode==AppMode.A) {
-      int targetX = ((x / mapSize.width) * gridW).floor();
-      int targetY = ((y / mapSize.height) * gridH).floor();
+    int? finalX;
+    int? finalY;
+    double minDistance = 999;
 
-      int? finalX;
-      int? finalY;
+    for (int dy = -4; dy <= 4; dy++) {
+      for (int dx = -4; dx <= 4; dx++) {
+        int checkX = targetX + dx;
+        int checkY = targetY + dy;
 
-      double minDistance = 999;
-
-      for (int dy = -4; dy <= 4; dy++) {
-        for (int dx = -4; dx <= 4; dx++) {
-          int checkX = targetX + dx;
-          int checkY = targetY + dy;
-
-          if (checkX >= 0 && checkX < gridW && checkY >= 0 && checkY < gridH) {
-            int index = checkY * gridW + checkX;
-            if (RoshaMap.grid[index] == 0) {
-              double dist = (dx * dx + dy * dy).toDouble();
-              if (dist < minDistance) {
-                minDistance = dist;
-                finalX = checkX;
-                finalY = checkY;
-              }
+        if (checkX >= 0 && checkX < gridW && checkY >= 0 && checkY < gridH) {
+          int index = checkY * gridW + checkX;
+          if (RoshaMap.grid[index] == 0) {
+            double dist = (dx * dx + dy * dy).toDouble();
+            if (dist < minDistance) {
+              minDistance = dist;
+              finalX = checkX;
+              finalY = checkY;
             }
           }
         }
       }
-      if (finalX != null && finalY != null) {
-        setState(() {
-          if (points.length >= 2) {
-            points.clear();
-            pathPoints.clear();
-            startGridX = null;
-            startGridY = null;
-          }
-
-          double drawX = (finalX! / gridW) * mapSize.width;
-          double drawY = (finalY! / gridH) * mapSize.height;
-          points.add(Offset(drawX, drawY));
-          if (points.length == 1) {
-            startGridX = finalX;
-            startGridY = finalY;
-          } else if (points.length == 2) {
-
-            List<Offset> gridPath = AStarSolver.findPath(startGridX!, startGridY!, finalX!, finalY!);
-            if (gridPath.isEmpty) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text("Путь не доступен")),
-              );
-            } else {
-              pathPoints = gridPath.map((p) => Offset(
-                (p.dx / gridW) * mapSize.width,
-                (p.dy / gridH) * mapSize.height,
-              )).toList();
-            }
-          }
-        });
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Это не дорога")),
-        );
-      }
     }
-    else {
-      if (x < 0 || x > mapSize.width || y < 0 || y > mapSize.height) return;
 
-      if (isClustered) {
-        ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Сначала очистите результат (кнопка Заново)")),
-        );
-        return;
-      }
+    if (finalX != null && finalY != null) {
       setState(() {
-        centroids.add(Offset(x, y));
+        if (points.length >= 2) {
+          points.clear();
+          pathPoints.clear();
+          startGridX = null;
+          startGridY = null;
+        }
+
+        double drawX = (finalX! / gridW) * mapSize.width;
+        double drawY = (finalY! / gridH) * mapSize.height;
+        points.add(Offset(drawX, drawY));
+        if (points.length == 1) {
+          startGridX = finalX;
+          startGridY = finalY;
+        } else if (points.length == 2) {
+          List<Offset> gridPath = AStarSolver.findPath(startGridX!, startGridY!, finalX!, finalY!);
+          if (gridPath.isEmpty) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text("Путь не доступен")),
+            );
+          } else {
+            pathPoints = gridPath.map((p) => Offset(
+              (p.dx / gridW) * mapSize.width,
+              (p.dy / gridH) * mapSize.height,
+            )).toList();
+          }
+        }
       });
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Это не дорога")),
+      );
+    }
+  } else {
+    if (x < 0 || x > mapSize.width || y < 0 || y > mapSize.height) return;
+
+    if (isClustered) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Сначала очистите результат (кнопка Заново)")),
+      );
+      return;
+    }
+    setState(() {
+      centroids.add(Offset(x, y));
+    });
     }
   }
 
@@ -592,6 +590,12 @@ class _NavigationScreenState extends State<NavigationScreen> {
   if (centroids.isEmpty) {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text("Сначала поставьте центроиды на карте!")),
+    );
+    return;
+  }
+  if (centroids.length > allCafes.length) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text("Количество центроидов превышает количество кафе! Переделайте центроиды!")),
     );
     return;
   }
@@ -744,11 +748,31 @@ double gridToPixelY(int gridY) {
               maxScale: 8.0,
               child: FittedBox(
               fit: BoxFit.contain,
-              child: GestureDetector(
-                onTapDown: (details) {
-                  _handleTap(details, const Size(320, 240));
-                },
-                child: SizedBox(
+              child: Listener(
+                  onPointerDown: (event) {
+                    _tapDownPosition = event.localPosition;
+                    _isDragging = false;
+                  },
+                  onPointerMove: (event) {
+                    if (_tapDownPosition != null) {
+                      final delta = event.localPosition - _tapDownPosition!;
+                      if (delta.distance > _dragThreshold) {
+                        _isDragging = true;
+                      }
+                    }
+                  },
+                  onPointerUp: (event) {
+                    if (!_isDragging && _tapDownPosition != null) {
+                      _handleTapFromPosition(_tapDownPosition!, const Size(320, 240));
+                    }
+                    _tapDownPosition = null;
+                    _isDragging = false;
+                  },
+                  onPointerCancel: (event) {
+                    _tapDownPosition = null;
+                    _isDragging = false;
+                  },
+                  child: SizedBox(
                   width: 320,
                   height: 240,
                   child: Stack(
@@ -782,7 +806,7 @@ double gridToPixelY(int gridY) {
                         decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
                       ),
                 )),
-                if (currentMode == AppMode.clustering && !isClustered)
+                if (currentMode == AppMode.clustering)
                   ...cafes.map((cafe) => Positioned(
                     left: gridToPixelX(cafe.gridX) - 6,
                     top: gridToPixelY(cafe.gridY) - 6,
@@ -835,15 +859,15 @@ double gridToPixelY(int gridY) {
                       left: centerX - 10,
                       top: centerY - 10,
                       child: Container(
-                        width: 20,
-                        height: 20,
+                        width: 16,
+                        height: 16,
                         decoration: BoxDecoration(
                           color: clusterColors[index % clusterColors.length],
                           shape: BoxShape.circle,
                           border: Border.all(color: Colors.white, width: 2),
                         ),
                         child: const Center(
-                          child: Icon(Icons.star, color: Colors.white, size: 12),
+                          child: Icon(Icons.star, color: Colors.white, size: 8),
                         ),
                       ),
                     );

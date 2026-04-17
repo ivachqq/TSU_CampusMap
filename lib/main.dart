@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/material.dart';
 import 'map_data_HD.dart';
 import 'path.dart';
 import 'other_screen.dart';
@@ -8,9 +7,6 @@ import 'cafe_data.dart';
 import 'drow_points.dart';
 import 'ant_algoritm.dart';
 import 'dop.dart';
-import 'Main.dart';
-import 'package:flutter/material.dart';
-import 'dart:math';
 import 'Painter.dart' as my_painter;
 import 'three.dart';
 
@@ -19,11 +15,27 @@ void main() => runApp(const TSUApp());
 
 class TSUApp extends StatelessWidget {
   const TSUApp({super.key});
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(primarySwatch: Colors.blue),
+      title: "TSU Map",
+
+      theme: ThemeData(
+        useMaterial3: true,
+        colorSchemeSeed: Colors.blue,
+        brightness: Brightness.light,
+      ),
+
+      darkTheme: ThemeData(
+        useMaterial3: true,
+        colorSchemeSeed: Colors.blue,
+        brightness: Brightness.dark,
+      ),
+
+      themeMode: ThemeMode.system,
+
       home: const MainNavigation(),
     );
   }
@@ -43,11 +55,6 @@ class _MainNavigationState extends State<MainNavigation> {
   void _handleUpdate() {
     setState(() {});
   }
-
-
-
-
-
 
 
   //для муравьинного
@@ -70,11 +77,6 @@ class _MainNavigationState extends State<MainNavigation> {
       IndexPage = 0;
     });
   }
-
-
-
-
-
 
   @override
   Widget build(BuildContext context) {
@@ -106,8 +108,6 @@ class _MainNavigationState extends State<MainNavigation> {
     );
   }
 }
-
-
 
 class NavigationScreen extends StatefulWidget {
   final List<MapPoint> selectedPoints;
@@ -145,26 +145,17 @@ class _NavigationScreenState extends State<NavigationScreen> {
   Offset? _tapDownPosition;
   static const double _dragThreshold = 8.0;
   @override
+
+
   void initState() {
     super.initState();
     double zoom = 2.5;
-
-    int k = 3;
-    List<Cafe> cafes = List.from(allCafes);
-    bool isClustered = false;
-    final List<Color> clusterColors = [];
-
-
     double offsetX = (320 / 1.5) * (1 - zoom);
     double offsetY = (240*1.4) * (1 - zoom);
     _transformationController.value = Matrix4.identity()
       ..translate(offsetX, offsetY)
       ..scale(zoom);
   }
-
-
-
-
 
   void _handleTapFromPosition(Offset localPosition, Size mapSize) {
     double x = localPosition.dx;
@@ -301,10 +292,6 @@ class _NavigationScreenState extends State<NavigationScreen> {
     return (gridY / gridH) * 240;
   }
 
-
-
-
-
   @override
   Widget build(BuildContext context) {
     return Column(
@@ -403,7 +390,6 @@ class _NavigationScreenState extends State<NavigationScreen> {
         Expanded(
           child: InteractiveViewer(
             // контроллер нажатий
-
             transformationController: _transformationController,
             boundaryMargin: const EdgeInsets.symmetric(vertical: 200, horizontal: 200),
             minScale: 2.5,
@@ -474,8 +460,6 @@ class _NavigationScreenState extends State<NavigationScreen> {
                             decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
                           ),
                         )),
-
-
 
                         // далее только кластеры
                         if (currentMode == AppMode.clustering)

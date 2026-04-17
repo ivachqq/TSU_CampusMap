@@ -48,7 +48,7 @@ class _DecisionTreeScreenState extends State<DecisionTreeScreen> {
     }
     return bestFeature;
   }
-  // функция математическая для нахождения опимальности вопроса
+  // функция мощнсти вопроса
   double _entropy(List<Map<String, String>> data) {
     if (data.isEmpty) return 0;
 

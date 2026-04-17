@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 class PathPainter extends CustomPainter {
   final List<Offset> path;
   final Color color;

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'map_data_HD.dart';
 import 'path.dart';
 import 'other_screen.dart';
@@ -6,7 +7,12 @@ import 'cluster.dart';
 import 'cafe_data.dart';
 import 'drow_points.dart';
 import 'ant_algoritm.dart';
+import 'dop.dart';
+import 'Main.dart';
+import 'package:flutter/material.dart';
 import 'dart:math';
+import 'Painter.dart' as my_painter;
+import 'three.dart';
 
 enum AppMode { A, clustering }
 void main() => runApp(const TSUApp());
@@ -22,6 +28,7 @@ class TSUApp extends StatelessWidget {
     );
   }
 }
+
 class MainNavigation extends StatefulWidget {
   const MainNavigation({super.key});
   @override
@@ -32,48 +39,56 @@ class _MainNavigationState extends State<MainNavigation> {
   int IndexPage = 0;
   List<Offset> pathPoints = [];
   final List<MapPoint> _selectedPoints = [];
-  
+
   void _handleUpdate() {
     setState(() {});
   }
 
+
+
+
+
+
+
+  //для муравьинного
   void _buildOptimizedRoute() {
     if (_selectedPoints.length < 2) return;
-
     setState(() {
       List<MapPoint> optimizedPoints = AntSolver.solveACO(_selectedPoints);
-
       List<Offset> fullPath = [];
       for (int i = 0; i < optimizedPoints.length - 1; i++) {
         var segment = AStarSolver.findPath(
           optimizedPoints[i].x, optimizedPoints[i].y,
           optimizedPoints[i + 1].x, optimizedPoints[i + 1].y,
         );
-
         fullPath.addAll(segment.map((p) => Offset(
           (p.dx / RoshaMap.width) * 320,
           (p.dy / RoshaMap.height) * 240,
         )));
       }
-
       this.pathPoints = fullPath;
       IndexPage = 0;
     });
   }
 
+
+
+
+
+
   @override
   Widget build(BuildContext context) {
     final List<Widget> screen = [
       NavigationScreen(selectedPoints: _selectedPoints, pathPoints: pathPoints),
-      const FoodScreen(),
-      const DecisionTreeScreen(),
+      FoodScreen(),
+      DecisionTreeScreen(),
       OtherScreen(
         selectedPoints: _selectedPoints,
         onChanged: _handleUpdate,
         buildOptimizedRoute: _buildOptimizedRoute,
       ),
     ];
-
+    //внизу
     return Scaffold(
       appBar: AppBar(title: const Text("TSU map")),
       body: screen[IndexPage],
@@ -93,230 +108,208 @@ class _MainNavigationState extends State<MainNavigation> {
 }
 
 
-class FoodScreen extends StatefulWidget {
-  const FoodScreen({super.key});
+
+class NavigationScreen extends StatefulWidget {
+  final List<MapPoint> selectedPoints;
+  final List<Offset> pathPoints;
+  const NavigationScreen({super.key, required this.selectedPoints, required this.pathPoints});
   @override
-  State<FoodScreen> createState() => _FoodScreenState();
+  State<NavigationScreen> createState() => _NavigationScreenState();
 }
 
-class FoodPlace {
-  final String name;
-  final Offset pos;
-  final List<String> menu;
-  final int closeHour;
-
-  FoodPlace(this.name, this.pos, this.menu, this.closeHour);
-}
-
-final List<FoodPlace> roshaPlaces = [
-  FoodPlace("СибБлины", const Offset(135, 140), ["Блины", "Обед"], 20),
-  FoodPlace("Starbucks", const Offset(133, 120), ["Кофе"], 22),
-  FoodPlace("Ярче", const Offset(305, 40), ["Посуда", "Сэндвич"], 23),
-  FoodPlace("ГК ТГУ", const Offset(255, 60), ["Обед"], 16),
-  FoodPlace("Магнит", const Offset(50, 76), ["Энергетик"], 22),
-];
-
-class _FoodScreenState extends State<FoodScreen> {
+class _NavigationScreenState extends State<NavigationScreen> {
   final TransformationController _transformationController = TransformationController();
+  AppMode currentMode = AppMode.A;
+  List<Offset> points = [];
+  List<Offset> pathPoints = [];
+  final int gridW = RoshaMap.width;
+  final int gridH = RoshaMap.height;
 
-  AppMode currentMode = AppMode.clustering;
+  int? startGridX;
+  int? startGridY;
 
-  final List<String> dishes = ["Блины", "Кофе", "Посуда", "Сэндвич", "Обед", "Энергетик"];
-  Set<String> selectedDishes = {};
-
-  bool isCalculating = false;
-  List<Offset> gaRoute = [];
-
-  double _calculateFitness(List<FoodPlace> route, Offset start) {
-    double dist = 0;
-    Offset currentPos = start;
-
-    double currentTime = DateTime.now().hour * 60.0 + DateTime.now().minute;
-    double penalty = 0;
-
-    for (var place in route) {
-      double d = (place.pos - currentPos).distance;
-      dist += d;
-      currentTime += (d / 83.3) + 5;
-
-      // Штраф за закрытие
-      if (currentTime > (place.closeHour * 60)) {
-        penalty += 10000;
-      }
-
-      double minToClose = (place.closeHour * 60) - currentTime;
-      if (minToClose < 30 && minToClose > 0) penalty -= 200;
-
-      currentPos = place.pos;
-    }
-    return dist + penalty;
-  }
-
-  List<FoodPlace> _crossover(List<FoodPlace> p1, List<FoodPlace> p2) {
-    int split = Random().nextInt(p1.length);
-    List<FoodPlace> child = p1.sublist(0, split);
-    for (var item in p2) {
-      if (!child.contains(item)) child.add(item);
-    }
-    return child;
-  }
-
-  void _mutate(List<FoodPlace> ind) {
-    if (ind.length < 2) return;
-    int i = Random().nextInt(ind.length);
-    int j = Random().nextInt(ind.length);
-    var temp = ind[i];
-    ind[i] = ind[j];
-    ind[j] = temp;
-  }
+  List<Offset> centroids = [];
+  int k = 3;
+  List<Cafe> cafes = List.from(allCafes);
+  bool isClustered = false;
+  final List<Color> clusterColors = [
+    Colors.red,
+    Colors.blue,
+    Colors.green,
+    Colors.orange,
+    Colors.purple,
+    Colors.teal,
+    Colors.pink,
+    Colors.brown,];
+  bool _isDragging = false;
+  Offset? _tapDownPosition;
+  static const double _dragThreshold = 8.0;
   @override
   void initState() {
     super.initState();
     double zoom = 2.5;
+
+    int k = 3;
+    List<Cafe> cafes = List.from(allCafes);
+    bool isClustered = false;
+    final List<Color> clusterColors = [];
+
+
     double offsetX = (320 / 1.5) * (1 - zoom);
-    double offsetY = (240 * 1.4) * (1 - zoom);
+    double offsetY = (240*1.4) * (1 - zoom);
     _transformationController.value = Matrix4.identity()
       ..translate(offsetX, offsetY)
       ..scale(zoom);
   }
 
-  Future<void> runGeneticAlgorithm() async {
-    setState(() {
-      currentMode = AppMode.A;
-      isCalculating = true;
-      gaRoute.clear();
-    });
 
-    Offset startPos = const Offset(135, 170);
 
-    List<FoodPlace> targets = roshaPlaces.where((p) =>
-        p.menu.any((item) => selectedDishes.contains(item))
-    ).toList();
 
-    int populationSize = 15;
-    int generations = 50;
-    double mutationRate = 0.2;
 
-    List<List<FoodPlace>> population = List.generate(populationSize, (_) =>
-    List<FoodPlace>.from(targets)..shuffle()
-    );
+  void _handleTapFromPosition(Offset localPosition, Size mapSize) {
+    double x = localPosition.dx;
+    double y = localPosition.dy;
 
-    for (int g = 0; g < generations; g++) {
-      population.sort((a, b) => _calculateFitness(a, startPos).compareTo(_calculateFitness(b, startPos)));
+    if (currentMode == AppMode.A) {
+      int targetX = ((x / mapSize.width) * gridW).floor();//тут переводим в номер клетки на карте
+      int targetY = ((y / mapSize.height) * gridH).floor();
 
-      List<FoodPlace> bestIndividual = population.first;
+      int? finalX;
+      int? finalY;
+      double minDistance = 999;
 
-      setState(() {
-        List<Offset> waypoints = [startPos, ...bestIndividual.map((e) => e.pos)];
-        gaRoute = _buildFullPath(waypoints);
-      });
+      for (int dy = -4; dy <= 4; dy++) {//проверяем ближайшмие, чтоб точно попасть
+        for (int dx = -4; dx <= 4; dx++) {
+          int checkX = targetX + dx;
+          int checkY = targetY + dy;
 
-      List<List<FoodPlace>> nextGen = [population.first];
-
-      while (nextGen.length < populationSize) {
-        var parent1 = population[Random().nextInt(5)];
-        var parent2 = population[Random().nextInt(5)];
-
-        var child = _crossover(parent1, parent2);
-
-        if (Random().nextDouble() < mutationRate) {
-          _mutate(child);
-        }
-        nextGen.add(child);
-      }
-      population = nextGen;
-
-      await Future.delayed(const Duration(milliseconds: 100));
-    }
-
-    setState(() { isCalculating = false; });
-  }
-  Offset? _getNearestRoad(int targetX, int targetY, int gridW, int gridH) {
-    int? finalX;
-    int? finalY;
-    double minDistance = 999;
-
-    for (int dy = -2; dy <= 2; dy++) {
-      for (int dx = -2; dx <= 2; dx++) {
-        int checkX = targetX + dx;
-        int checkY = targetY + dy;
-
-        if (checkX >= 0 && checkX < gridW && checkY >= 0 && checkY < gridH) {
-          int index = checkY * gridW + checkX;
-          if (RoshaMap.grid[index] == 0) { // 0 - это дорога
-            double dist = (dx * dx + dy * dy).toDouble();
-            if (dist < minDistance) {
-              minDistance = dist;
-              finalX = checkX;
-              finalY = checkY;
+          if (checkX >= 0 && checkX < gridW && checkY >= 0 && checkY < gridH) {
+            int index = checkY * gridW + checkX;
+            if (RoshaMap.grid[index] == 0) {
+              double dist = (dx * dx + dy * dy).toDouble();
+              if (dist < minDistance) {
+                minDistance = dist;
+                finalX = checkX;
+                finalY = checkY;
+              }
             }
           }
         }
       }
-    }
-    if (finalX != null && finalY != null) return Offset(finalX.toDouble(), finalY.toDouble());
-    return null;
-  }
 
-  List<Offset> _buildFullPath(List<Offset> waypoints) {
-    List<Offset> fullRoute = [];
+      if (finalX != null && finalY != null) {
+        setState(() {
+          if (points.length >= 2) {//сбрасываем старый маршрут
+            points.clear();
+            pathPoints.clear();
+            startGridX = null;
+            startGridY = null;
+          }
 
-    final int gridW = RoshaMap.width;
-    final int gridH = RoshaMap.height;
-    final double mapWidth = 320.0;
-    final double mapHeight = 240.0;
-
-    for (int i = 0; i < waypoints.length - 1; i++) {
-      Offset start = waypoints[i];
-      Offset goal = waypoints[i + 1];
-
-
-      int startX = ((start.dx / mapWidth) * gridW).floor();
-      int startY = ((start.dy / mapHeight) * gridH).floor();
-      int goalX = ((goal.dx / mapWidth) * gridW).floor();
-      int goalY = ((goal.dy / mapHeight) * gridH).floor();
-
-      Offset? validStart = _getNearestRoad(startX, startY, gridW, gridH);
-      Offset? validGoal = _getNearestRoad(goalX, goalY, gridW, gridH);
-
-      List<Offset> segment = [];
-
-      if (validStart != null && validGoal != null) {
-        List<Offset> gridPath = AStarSolver.findPath(
-            validStart.dx.toInt(), validStart.dy.toInt(),
-            validGoal.dx.toInt(), validGoal.dy.toInt()
-        );
-
-        if (gridPath.isNotEmpty) {
-
-          segment = gridPath.map((p) => Offset(
-            (p.dx / gridW) * mapWidth,
-            (p.dy / gridH) * mapHeight,
-          )).toList();
-        }
-      }
-
-      if (segment.isNotEmpty) {
-        fullRoute.add(start);
-
-        if (fullRoute.length > 1) segment.removeAt(0);
-        fullRoute.addAll(segment);
-
-        fullRoute.add(goal);
+          double drawX = (finalX! / gridW) * mapSize.width;
+          double drawY = (finalY! / gridH) * mapSize.height;
+          points.add(Offset(drawX, drawY));
+          if (points.length == 1) {
+            startGridX = finalX;
+            startGridY = finalY;
+          } else if (points.length == 2) {
+            List<Offset> gridPath = AStarSolver.findPath(startGridX!, startGridY!, finalX!, finalY!);//запуск самого A*
+            if (gridPath.isEmpty) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text("Путь не доступен")),
+              );
+            } else {
+              pathPoints = gridPath.map((p) => Offset(
+                (p.dx / gridW) * mapSize.width,
+                (p.dy / gridH) * mapSize.height,
+              )).toList();
+            }
+          }
+        });
       } else {
-        fullRoute.add(start);
-        fullRoute.add(goal);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Это не дорога")),
+        );
       }
-    }
+    } else {//для кластеров
+      if (x < 0 || x > mapSize.width || y < 0 || y > mapSize.height) return;
 
-    return fullRoute;
+      if (isClustered) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Сначала очистите результат (кнопка Заново)")),
+        );
+        return;
+      }
+      setState(() {
+        centroids.add(Offset(x, y));
+      });
+    }
   }
+  //для кластеров
+  void runClustering() {
+    if (centroids.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Сначала поставьте центроиды на карте!")),
+      );
+      return;
+    }
+    if (centroids.length > allCafes.length) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Количество центроидов превышает количество кафе! Переделайте центроиды!")),
+      );
+      return;
+    }
+    KMeanClustering kmeans = KMeanClustering();
+    List<Cafe> workingCafes = kmeans.cluster(
+      cafes,
+      centroids,
+      gridW,
+      gridH,
+      320.0,
+      240.0,
+    );
+
+    setState(() {
+      cafes = workingCafes;
+      isClustered = true;
+    });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text("Кластеризация завершена! ${centroids.length} кластеров")),
+    );
+  }
+
+  void resetClustering() {
+    setState(() {
+      for (var cafe in cafes) {
+        cafe.clusterId = null;
+      }
+      cafes = List.from(allCafes);
+      centroids.clear();
+      isClustered = false;
+    });
+  }
+  Color getCafeColor(Cafe cafe) {
+    if (!isClustered) return Colors.grey;
+    int id = cafe.clusterId ?? 0;
+    return clusterColors[id % clusterColors.length];
+  }
+  double gridToPixelX(int gridX) {
+    return (gridX / gridW) * 320;
+  }
+  double gridToPixelY(int gridY) {
+    return (gridY / gridH) * 240;
+  }
+
+
+
+
+
   @override
   Widget build(BuildContext context) {
     return Column(
       children: [
-        const SizedBox(height: 10),
-
+        //кнопка A* - кластеры
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
@@ -328,9 +321,17 @@ class _FoodScreenState extends State<FoodScreen> {
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
                   color: currentMode == AppMode.A ? Colors.blue : Colors.grey[400],
-                  borderRadius: const BorderRadius.horizontal(left: Radius.circular(25)),
+                  borderRadius: BorderRadius.horizontal(left: Radius.circular(25)),
+
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.15),
+                      blurRadius: 6,
+                      offset: Offset(0, 3),
+                    ),
+                  ],
                 ),
-                child: const Text("Карта", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                child: Text("A* маршрут", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
               ),
             ),
             GestureDetector(
@@ -341,894 +342,216 @@ class _FoodScreenState extends State<FoodScreen> {
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
                   color: currentMode == AppMode.clustering ? Colors.blue : Colors.grey[400],
-                  borderRadius: const BorderRadius.horizontal(right: Radius.circular(25)),
+                  borderRadius: BorderRadius.horizontal(right: Radius.circular(25)),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.15),
+                      blurRadius: 6,
+                      offset: Offset(0, 3),
+                    ),
+                  ],
                 ),
-                child: const Text("Выбор еды", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                child: Text("Кластеризация", style: TextStyle(color: Colors.white)),
               ),
             ),
           ],
         ),
-
-        const SizedBox(height: 20),
-        Expanded(
-          child: currentMode == AppMode.A ? _buildMapView() : _buildSelectionView(),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildSelectionView() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text("Что вы хотите купить?", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 15),
-          Wrap(
-            spacing: 10,
-            runSpacing: 10,
-            children: dishes.map((dish) {
-              final isSelected = selectedDishes.contains(dish);
-              return FilterChip(
-                label: Text(dish),
-                selected: isSelected,
-                selectedColor: Colors.blue.withOpacity(0.2),
-                checkmarkColor: Colors.blue,
-                onSelected: (bool value) {
-                  setState(() {
-                    value ? selectedDishes.add(dish) : selectedDishes.remove(dish);
-                  });
-                },
-              );
-            }).toList(),
-          ),
-          const Spacer(),
-          Center(
-            child: ElevatedButton(
-              onPressed: selectedDishes.isEmpty || isCalculating ? null : runGeneticAlgorithm,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.blue,
-                padding: const EdgeInsets.symmetric(horizontal: 50, vertical: 15),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
-              ),
-              child: isCalculating
-                  ? const CircularProgressIndicator(color: Colors.white)
-                  : const Text("РАССЧИТАТЬ ПУТЬ", style: TextStyle(color: Colors.white)),
-            ),
-          ),
-          const SizedBox(height: 30),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildMapView() {
-    return InteractiveViewer(
-      transformationController: _transformationController,
-      boundaryMargin: const EdgeInsets.symmetric(vertical: 200, horizontal: 200),
-      minScale: 2.5,
-      maxScale: 8.0,
-      child: FittedBox(
-        fit: BoxFit.contain,
-        child: SizedBox(
-          width: 320,
-          height: 240,
-          child: Stack(
-            children: [
-              Image.asset(
-                'assets/images/MAP.png',
-                width: 320,
-                height: 240,
-                fit: BoxFit.fill,
-              ),
-              CustomPaint(
-                size: const Size(320, 240),
-                painter: PathPainter(gaRoute, color: Colors.orange),
-              ),
-              ...roshaPlaces.map((p) => Positioned(
-                left: p.pos.dx - 3,
-                top: p.pos.dy - 3,
-                child: Container(
-                  width: 6, height: 6,
-                  decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
+        if (currentMode == AppMode.clustering)
+          Padding(
+            // кнопки кластеров
+            padding: const EdgeInsets.all(8),
+            child: Column(
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text("Центроидов: ${centroids.length}"),
+                    const SizedBox(width: 16),
+                    if (!isClustered && centroids.isNotEmpty)
+                      TextButton(
+                        onPressed: () => setState(() => centroids.clear()),
+                        child: const Text("Очистить"),
+                      ),
+                    if (isClustered)
+                      TextButton(
+                        onPressed: resetClustering,
+                        child: const Text("Заново"),
+                      ),
+                  ],
                 ),
-              )),
-              if (gaRoute.isNotEmpty)
-                Positioned(
-                  left: gaRoute.first.dx - 4,
-                  top: gaRoute.first.dy - 4,
-                  child: Container(
-                    width: 8, height: 8,
-                    decoration: const BoxDecoration(color: Colors.green, shape: BoxShape.circle),
+                if (!isClustered && centroids.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: ElevatedButton(
+                      onPressed: runClustering,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blue,
+                      ),
+                      child: const Text("Кластеризовать"),
+                    ),
                   ),
-                ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-class NavigationScreen extends StatefulWidget {
-  final List<MapPoint> selectedPoints;
-  final List<Offset> pathPoints;
-  const NavigationScreen({super.key, required this.selectedPoints, required this.pathPoints});
-  @override
-  State<NavigationScreen> createState() => _NavigationScreenState();
-}
-
-class _NavigationScreenState extends State<NavigationScreen> {
-  final TransformationController _transformationController = TransformationController();
-  AppMode currentMode = AppMode.A;  
-  List<Offset> points = [];
-  List<Offset> pathPoints = [];
-  final int gridW = RoshaMap.width;
-  final int gridH = RoshaMap.height;
-
-  int? startGridX;
-  int? startGridY;
-  
-  List<Offset> centroids = [];
-  int k = 3;
-  List<Cafe> cafes = List.from(allCafes);
-  bool isClustered = false;
-  final List<Color> clusterColors = [
-  Colors.red,
-  Colors.blue,
-  Colors.green,
-  Colors.orange,
-  Colors.purple,
-  Colors.teal,
-  Colors.pink,
-  Colors.brown,];
-  bool _isDragging = false;
-  Offset? _tapDownPosition;
-  static const double _dragThreshold = 8.0;
-  @override
-  void initState() {
-    super.initState();
-    double zoom = 2.5;
-
-  int k = 3;  
-  List<Cafe> cafes = List.from(allCafes);
-  bool isClustered = false;  
-  final List<Color> clusterColors = [];
-
-
-    double offsetX = (320 / 1.5) * (1 - zoom);
-    double offsetY = (240*1.4) * (1 - zoom);
-    _transformationController.value = Matrix4.identity()
-      ..translate(offsetX, offsetY)
-      ..scale(zoom);
-  }
-  void _handleTapFromPosition(Offset localPosition, Size mapSize) {
-  double x = localPosition.dx;
-  double y = localPosition.dy;
-
-  int targetX = ((x / mapSize.width) * gridW).floor();
-  int targetY = ((y / mapSize.height) * gridH).floor();
-  print('Точка, х: $targetX, y: $targetY');
-
-  if (currentMode == AppMode.A) {
-    int targetX = ((x / mapSize.width) * gridW).floor();
-    int targetY = ((y / mapSize.height) * gridH).floor();
-
-    int? finalX;
-    int? finalY;
-    double minDistance = 999;
-
-    for (int dy = -4; dy <= 4; dy++) {
-      for (int dx = -4; dx <= 4; dx++) {
-        int checkX = targetX + dx;
-        int checkY = targetY + dy;
-
-        if (checkX >= 0 && checkX < gridW && checkY >= 0 && checkY < gridH) {
-          int index = checkY * gridW + checkX;
-          if (RoshaMap.grid[index] == 0) {
-            double dist = (dx * dx + dy * dy).toDouble();
-            if (dist < minDistance) {
-              minDistance = dist;
-              finalX = checkX;
-              finalY = checkY;
-            }
-          }
-        }
-      }
-    }
-
-    if (finalX != null && finalY != null) {
-      setState(() {
-        if (points.length >= 2) {
-          points.clear();
-          pathPoints.clear();
-          startGridX = null;
-          startGridY = null;
-        }
-
-        double drawX = (finalX! / gridW) * mapSize.width;
-        double drawY = (finalY! / gridH) * mapSize.height;
-        points.add(Offset(drawX, drawY));
-        if (points.length == 1) {
-          startGridX = finalX;
-          startGridY = finalY;
-        } else if (points.length == 2) {
-          List<Offset> gridPath = AStarSolver.findPath(startGridX!, startGridY!, finalX!, finalY!);
-          if (gridPath.isEmpty) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text("Путь не доступен")),
-            );
-          } else {
-            pathPoints = gridPath.map((p) => Offset(
-              (p.dx / gridW) * mapSize.width,
-              (p.dy / gridH) * mapSize.height,
-            )).toList();
-          }
-        }
-      });
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Это не дорога")),
-      );
-    }
-  } else {
-    if (x < 0 || x > mapSize.width || y < 0 || y > mapSize.height) return;
-
-    if (isClustered) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Сначала очистите результат (кнопка Заново)")),
-      );
-      return;
-    }
-    setState(() {
-      centroids.add(Offset(x, y));
-    });
-    }
-  }
-
-  void runClustering() {
-  if (centroids.isEmpty) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("Сначала поставьте центроиды на карте!")),
-    );
-    return;
-  }
-  if (centroids.length > allCafes.length) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("Количество центроидов превышает количество кафе! Переделайте центроиды!")),
-    );
-    return;
-  }
-  KMeanClustering kmeans = KMeanClustering();
-  List<Cafe> workingCafes = kmeans.cluster(
-    cafes,
-    centroids,
-    gridW,
-    gridH,
-    320.0,
-    240.0,
-  );
-
-  setState(() {
-    cafes = workingCafes;
-    isClustered = true;
-  });
-
-  ScaffoldMessenger.of(context).showSnackBar(
-    SnackBar(content: Text("Кластеризация завершена! ${centroids.length} кластеров")),
-  );
-}
-
-void resetClustering() {
-  setState(() {
-    for (var cafe in cafes) {
-      cafe.clusterId = null;
-    }
-    cafes = List.from(allCafes);
-    centroids.clear();
-    isClustered = false;
-  });
-}
-
-
-Color getCafeColor(Cafe cafe) {
-  if (!isClustered) return Colors.grey;
-  int id = cafe.clusterId ?? 0;
-  return clusterColors[id % clusterColors.length];
-}
-
-double gridToPixelX(int gridX) {
-  return (gridX / gridW) * 320;
-}
-
-double gridToPixelY(int gridY) {
-  return (gridY / gridH) * 240;
-}
-
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          GestureDetector(
-            onTap: () => setState(() => currentMode = AppMode.A),
-            child: Container(
-              width: 150,
-              padding: const EdgeInsets.symmetric(vertical: 15),
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: currentMode == AppMode.A ? Colors.blue : Colors.grey[400],
-                borderRadius: BorderRadius.horizontal(left: Radius.circular(25)),
-
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.15),
-                  blurRadius: 6,
-                  offset: Offset(0, 3),
-                ),
               ],
-              ),
-              child: Text("A* маршрут", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
             ),
-          ),
-          GestureDetector(
-            onTap: () => setState(() => currentMode = AppMode.clustering),
-            child: Container(
-              width: 150,
-              padding: const EdgeInsets.symmetric(vertical: 15),
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: currentMode == AppMode.clustering ? Colors.blue : Colors.grey[400],
-                borderRadius: BorderRadius.horizontal(right: Radius.circular(25)),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.15),
-                    blurRadius: 6,
-                    offset: Offset(0, 3),
-                  ),
-                ],
-              ),
-              child: Text("Кластеризация", style: TextStyle(color: Colors.white)),
-            ),
-          ),
-        ],
-      ),
-      if (currentMode == AppMode.clustering)
-        Padding(
-          padding: const EdgeInsets.all(8),
-          child: Column(
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text("Центроидов: ${centroids.length}"),
-                  const SizedBox(width: 16),
-                  if (!isClustered && centroids.isNotEmpty)
-                    TextButton(
-                      onPressed: () => setState(() => centroids.clear()),
-                      child: const Text("Очистить"),
-                    ),
-                  if (isClustered)
-                    TextButton(
-                      onPressed: resetClustering,
-                      child: const Text("Заново"),
-                    ),
-                ],
-              ),
-              if (!isClustered && centroids.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(top: 4),
-                  child: ElevatedButton(
-                    onPressed: runClustering,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.blue,
-                    ),
-                    child: const Text("Кластеризовать"),
-                  ),
-                ),
-            ],
-          ),
 
-        ),
+          ),
         Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [Text("Карта Рощи:", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),]
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [Text("Карта Рощи:", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),]
         ),
 
         Expanded(
-            child: InteractiveViewer(
+          child: InteractiveViewer(
+            // контроллер нажатий
 
-              transformationController: _transformationController,
-              boundaryMargin: const EdgeInsets.symmetric(vertical: 200, horizontal: 200),
-              minScale: 2.5,
-              maxScale: 8.0,
-              child: FittedBox(
+            transformationController: _transformationController,
+            boundaryMargin: const EdgeInsets.symmetric(vertical: 200, horizontal: 200),
+            minScale: 2.5,
+            maxScale: 8.0,
+            child: FittedBox(
               fit: BoxFit.contain,
               child: Listener(
-                  onPointerDown: (event) {
-                    _tapDownPosition = event.localPosition;
-                    _isDragging = false;
-                  },
-                  onPointerMove: (event) {
-                    if (_tapDownPosition != null) {
-                      final delta = event.localPosition - _tapDownPosition!;
-                      if (delta.distance > _dragThreshold) {
-                        _isDragging = true;
-                      }
+                onPointerDown: (event) {
+                  _tapDownPosition = event.localPosition;
+                  _isDragging = false;
+                },
+                onPointerMove: (event) {
+                  if (_tapDownPosition != null) {
+                    final delta = event.localPosition - _tapDownPosition!;
+                    if (delta.distance > _dragThreshold) {
+                      _isDragging = true;
                     }
-                  },
-                  onPointerUp: (event) {
-                    if (!_isDragging && _tapDownPosition != null) {
-                      _handleTapFromPosition(_tapDownPosition!, const Size(320, 240));
-                    }
-                    _tapDownPosition = null;
-                    _isDragging = false;
-                  },
-                  onPointerCancel: (event) {
-                    _tapDownPosition = null;
-                    _isDragging = false;
-                  },
-                  child: SizedBox(
-                  width: 320,
-                  height: 240,
-                  child: Stack(
-                  children: [
-                    SizedBox(
-                      width: 320, height: 240,
-                      child: Image.asset('assets/images/MAP.png', fit: BoxFit.fill),
-                    ),
-                    ...widget.pathPoints.map((p) => Positioned(
-                      left: p.dx - 1,
-                      top: p.dy - 1,
-                      child: Container(
-                        width: 2, height: 2,
-                        decoration: const BoxDecoration(color: Colors.blue, shape: BoxShape.circle),
-                      ),
-                    )).toList(),
-                    CustomPaint(
-                      size: const Size(320, 240),
-                      painter: PathPainter(pathPoints),
-                    ),
-                    SelectedPointsLayer(
-                      selectedPoints: widget.selectedPoints,
-                      gridW: gridW,
-                      gridH: gridH,
-                    ),
-                    ...points.map((p) => Positioned(
-                      left: p.dx - 2,
-                      top: p.dy - 2,
-                      child: Container(
-                        width: 5, height: 5,
-                        decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
-                      ),
-                )),
-                if (currentMode == AppMode.clustering)
-                  ...cafes.map((cafe) => Positioned(
-                    left: gridToPixelX(cafe.gridX) - 6,
-                    top: gridToPixelY(cafe.gridY) - 6,
-                    child: Container(
-                      width: 12,
-                      height: 12,
-                      decoration: BoxDecoration(
-                        color: getCafeColor(cafe),
-                        shape: BoxShape.circle,
-                        border: Border.all(color: Colors.white, width: 1.5),
-                      ),
-                      child: Tooltip(
-                        message: cafe.name,
-                        child: const SizedBox.expand(),
-                      ),
-                    ),
-                  )),
-                if (currentMode == AppMode.clustering)
-                  ...centroids.asMap().entries.map((entry) => Positioned(
-                    left: entry.value.dx - 8,
-                    top: entry.value.dy - 8,
-                    child: Container(
-                      width: 16, height: 16,
-                      decoration: BoxDecoration(
-                        color: Colors.red,
-                        shape: BoxShape.circle,
-                        border: Border.all(color: Colors.white, width: 2),
-                      ),
-                      child: Center(
-                        child: Text(
-                          "${entry.key + 1}",
-                          style: TextStyle(color: Colors.white, fontSize: 10),
+                  }
+                },
+                onPointerUp: (event) {
+                  if (!_isDragging && _tapDownPosition != null) {
+                    _handleTapFromPosition(_tapDownPosition!, const Size(320, 240));//запуск алгоритма
+                  }
+                  _tapDownPosition = null;
+                  _isDragging = false;
+                },
+                onPointerCancel: (event) {
+                  _tapDownPosition = null;
+                  _isDragging = false;
+                },
+
+                child: SizedBox(
+                    width: 320,
+                    height: 240,
+                    child: Stack(
+                      children: [
+                        SizedBox(
+                          width: 320, height: 240,
+                          child: Image.asset('assets/images/MAP.png', fit: BoxFit.fill),
                         ),
-                      ),
-                    ),
-                  )),
-                  if (currentMode == AppMode.clustering && isClustered)
-                  ...List.generate(centroids.length, (index) {
-                    List<Cafe> clusterCafes = cafes.where((c) => c.clusterId == index).toList();
-                    if (clusterCafes.isEmpty) return const SizedBox();
-                    double sumX = 0;
-                    double sumY = 0;
-                    for (var cafe in clusterCafes) {
-                      sumX += cafe.gridX;
-                      sumY += cafe.gridY;
-                    }
-                    double centerX = (sumX / clusterCafes.length) / gridW * 320;
-                    double centerY = (sumY / clusterCafes.length) / gridH * 240;
-                    return Positioned(
-                      left: centerX - 10,
-                      top: centerY - 10,
-                      child: Container(
-                        width: 16,
-                        height: 16,
-                        decoration: BoxDecoration(
-                          color: clusterColors[index % clusterColors.length],
-                          shape: BoxShape.circle,
-                          border: Border.all(color: Colors.white, width: 2),
+
+                        ...widget.pathPoints.map((p) => Positioned(//для муравьинного
+                          left: p.dx - 1,
+                          top: p.dy - 1,
+                          child: Container(
+                            width: 2, height: 2,
+                            decoration: const BoxDecoration(color: Colors.blue, shape: BoxShape.circle),
+                          ),
+                        )).toList(),
+
+                        CustomPaint(// отрисовка построения маршрута
+                          size: const Size(320, 240),
+                          painter: my_painter.PathPainter(pathPoints),
                         ),
-                        child: const Center(
-                          child: Icon(Icons.star, color: Colors.white, size: 8),
+
+
+                        SelectedPointsLayer(
+                          selectedPoints: widget.selectedPoints,
+                          gridW: gridW,
+                          gridH: gridH,
                         ),
-                      ),
-                    );
-                  }),
-              ],
-            )
-          ),
-              ),
+
+                        ...points.map((p) => Positioned(// отрисовка старт финишь
+                          left: p.dx - 2,
+                          top: p.dy - 2,
+                          child: Container(
+                            width: 5, height: 5,
+                            decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
+                          ),
+                        )),
+
+
+
+                        // далее только кластеры
+                        if (currentMode == AppMode.clustering)
+                          ...cafes.map((cafe) => Positioned(
+                            left: gridToPixelX(cafe.gridX) - 6,
+                            top: gridToPixelY(cafe.gridY) - 6,
+                            child: Container(
+                              width: 12,
+                              height: 12,
+                              decoration: BoxDecoration(
+                                color: getCafeColor(cafe),
+                                shape: BoxShape.circle,
+                                border: Border.all(color: Colors.white, width: 1.5),
+                              ),
+                              child: Tooltip(
+                                message: cafe.name,
+                                child: const SizedBox.expand(),
+                              ),
+                            ),
+                          )),
+                        if (currentMode == AppMode.clustering)
+                          ...centroids.asMap().entries.map((entry) => Positioned(
+                            left: entry.value.dx - 8,
+                            top: entry.value.dy - 8,
+                            child: Container(
+                              width: 16, height: 16,
+                              decoration: BoxDecoration(
+                                color: Colors.red,
+                                shape: BoxShape.circle,
+                                border: Border.all(color: Colors.white, width: 2),
+                              ),
+                              child: Center(
+                                child: Text(
+                                  "${entry.key + 1}",
+                                  style: TextStyle(color: Colors.white, fontSize: 10),
+                                ),
+                              ),
+                            ),
+                          )),
+                        if (currentMode == AppMode.clustering && isClustered)
+                          ...List.generate(centroids.length, (index) {
+                            List<Cafe> clusterCafes = cafes.where((c) => c.clusterId == index).toList();
+                            if (clusterCafes.isEmpty) return const SizedBox();
+                            double sumX = 0;
+                            double sumY = 0;
+                            for (var cafe in clusterCafes) {
+                              sumX += cafe.gridX;
+                              sumY += cafe.gridY;
+                            }
+                            double centerX = (sumX / clusterCafes.length) / gridW * 320;
+                            double centerY = (sumY / clusterCafes.length) / gridH * 240;
+                            return Positioned(
+                              left: centerX - 10,
+                              top: centerY - 10,
+                              child: Container(
+                                width: 16,
+                                height: 16,
+                                decoration: BoxDecoration(
+                                  color: clusterColors[index % clusterColors.length],
+                                  shape: BoxShape.circle,
+                                  border: Border.all(color: Colors.white, width: 2),
+                                ),
+                                child: const Center(
+                                  child: Icon(Icons.star, color: Colors.white, size: 8),
+                                ),
+                              ),
+                            );
+                          }),
+                      ],
+                    )
+                ),
               ),
             ),
+          ),
         ),
       ],
     );
-  }
-}
-class PathPainter extends CustomPainter {
-  final List<Offset> path;
-  final Color color;
-
-  PathPainter(this.path, {this.color = Colors.blue});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    if (path.isEmpty) return;
-
-    final paint = Paint()
-      ..color = color
-      ..strokeWidth = 4.0
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round;
-
-    final pathObj = Path();
-    pathObj.moveTo(path.first.dx, path.first.dy);
-
-    for (int i = 1; i < path.length; i++) {
-      pathObj.lineTo(path[i].dx, path[i].dy);
-    }
-
-    canvas.drawPath(pathObj, paint);
-  }
-
-  @override
-  bool shouldRepaint(PathPainter oldDelegate) => oldDelegate.path != path;
-}
-
-// Создаем ноду
-class DecisionNode {
-  String? feature;
-  Map<String, DecisionNode>? children;
-  String? result;
-  DecisionNode({this.feature, this.children, this.result});
-  bool get isLeaf => result != null;
-}
-
-class DecisionTreeScreen extends StatefulWidget {
-  const DecisionTreeScreen({super.key});
-  @override
-  State<DecisionTreeScreen> createState() => _DecisionTreeScreenState();
-}
-class _DecisionTreeScreenState extends State<DecisionTreeScreen> {
-  // находим самый оптимальный вопрос
-  String _getBestFeature(List<Map<String, String>> data, List<String> features) {
-    double baseEntropy = _entropy(data);
-    String bestFeature = features[0];
-    double maxGain = -1.0;
-    for (int i = 0; i < features.length; i++) {
-      String currentFeat = features[i];
-      double currentFeatEntropy = 0;
-      Set<String> uniqueValues = {};
-      for (int j = 0; j < data.length; j++) {
-        String val = data[j][currentFeat]!;
-        uniqueValues.add(val);
-      }
-      for (String val in uniqueValues) {
-        List<Map<String, String>> subset = [];
-        for (int k = 0; k < data.length; k++) {
-          if (data[k][currentFeat] == val) {
-            subset.add(data[k]);
-          }
-        }
-        double weight = subset.length / data.length;
-        currentFeatEntropy = currentFeatEntropy + (weight * _entropy(subset));
-      }
-      double gain = baseEntropy - currentFeatEntropy;
-      if (gain > maxGain) {
-        maxGain = gain;
-        bestFeature = currentFeat;
-      }
-    }
-    return bestFeature;
-  }
-  // функция математическая для нахождения опимальности вопроса
-  double _entropy(List<Map<String, String>> data) {
-    if (data.isEmpty) return 0;
-
-    Map<String, int> counts = {};
-    for (var row in data) {
-      String res = row['recommended_place']!;
-      counts[res] = (counts[res] ?? 0) + 1;
-    }
-
-    double entropy = 0;
-    for (var count in counts.values) {
-      double p = count / data.length;
-      entropy -= p * (log(p) / log(2));
-    }
-    return entropy;
-  }
-  //csv файл
-  final String _rawTrainingData =
-      "location,budget,time_available,food_type,queue_tolerance,weather,recommended_place\n"
-      "main_building,low,medium,full_meal,medium,good,Main_Cafeteria\n"
-      "main_building,low,short,snack,low,good,Yarche\n"
-      "main_building,medium,short,coffee,low,good,Bus_Stop_Coffee\n"
-      "main_building,high,medium,coffee,medium,good,Starbooks\n"
-      "second_building,low,very_short,snack,low,good,Vending_Machine\n"
-      "second_building,medium,short,coffee,medium,good,Second_Building_Cafe\n"
-      "second_building,medium,medium,full_meal,medium,good,Main_Cafeteria\n"
-      "second_building,low,short,snack,low,bad,Vending_Machine\n"
-      "campus_center,medium,short,pancakes,medium,good,Siberian_Pancakes";
-
-  DecisionNode? root;
-  String resultPlace = "";
-  List<String> decisionPath = [];
-  String treeStructure = "";
-
-  Map<String, String> userInputs = {
-    'location': 'main_building',
-    'budget': 'low',
-    'time_available': 'medium',
-    'food_type': 'full_meal',
-    'queue_tolerance': 'medium',
-    'weather': 'good'
-  };
-
-  @override
-  void initState() {
-    super.initState();
-    _initAlgorithm();
-  }
-
-  void _initAlgorithm() {
-    try {
-      _buildTree();
-      _generateTreeVisual();
-    } catch (e) {
-      print("Ошибка при сборке дерева: $e");
-    }
-  }
-
-  void _predict() {
-    List<String> path = [];
-    DecisionNode? current = root;
-
-    if (current == null) return;
-
-    while (current != null && !current.isLeaf) {
-      String? attr = current.feature;
-      String? userChoice = userInputs[attr];
-
-      if (attr == null || userChoice == null) break;
-
-      path.add("Признак: [$attr] → Выбрали: '$userChoice'");
-
-      if (current.children != null && current.children!.containsKey(userChoice)) {
-        current = current.children![userChoice];
-      } else {
-        path.add("⚠ Ветка '$userChoice' не найдена в обучении");
-        current = null;
-      }
-    }
-
-    setState(() {
-      decisionPath = path;
-      resultPlace = (current != null && current.isLeaf) ? current.result! : "Неизвестно (мало данных)";
-    });
-  }
-
-  // проверка
-  Widget _buildSafePicker(String label, String key, List<String> options) {
-    if (!options.contains(userInputs[key])) {
-      userInputs[key] = options.first;
-    }
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(label, style: const TextStyle(fontSize: 13)),
-          DropdownButton<String>(
-            value: userInputs[key],
-            style: const TextStyle(color: Colors.blue, fontSize: 13),
-            items: options.map((o) => DropdownMenuItem(value: o, child: Text(o))).toList(),
-            onChanged: (val) {
-              if (val != null) setState(() => userInputs[key] = val);
-            },
-          ),
-        ],
-      ),
-    );
-  }
-  //тоже визуал
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.white,
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text("СТРУКТУРА ДЕРЕВА", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-            const SizedBox(height: 8),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(color: Colors.grey[100], borderRadius: BorderRadius.circular(8)),
-              child: Text(treeStructure, style: const TextStyle(fontFamily: 'monospace', fontSize: 10, color: Colors.black87)),
-            ),
-            const Divider(height: 32),
-
-            const Text("НАСТРОЙКИ ВЫБОРА", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-            const SizedBox(height: 10),
-
-
-            _buildSafePicker("Местоположение", "location", ["main_building", "second_building", "campus_center", "bus_stop"]),
-            _buildSafePicker("Бюджет", "budget", ["low", "medium", "high"]),
-            _buildSafePicker("Время", "time_available", ["very_short", "short", "medium"]),
-            _buildSafePicker("Тип еды", "food_type", ["full_meal", "snack", "pancakes", "coffee"]),
-            _buildSafePicker("Очередь", "queue_tolerance", ["low", "medium", "high"]),
-            _buildSafePicker("Погода", "weather", ["good", "bad"]),
-
-            const SizedBox(height: 24),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: _predict,
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.blue),
-                child: const Text("РАССЧИТАТЬ ПУТЬ", style: TextStyle(color: Colors.white)),
-              ),
-            ),
-
-            if (resultPlace.isNotEmpty) _buildResultSection(),
-          ],
-        ),
-      ),
-    );
-  }
-  //тож визуал
-  Widget _buildResultSection() {
-    return Container(
-      margin: const EdgeInsets.only(top: 24),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.blue.withOpacity(0.05),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.blue.withOpacity(0.3)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text("ИТОГОВОЕ РЕШЕНИЕ:", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-          Text(resultPlace.replaceAll('_', ' '), style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.blue)),
-          const Divider(height: 24),
-          const Text("ЛОГИЧЕСКИЙ ПУТЬ ПО УЗЛАМ:", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 8),
-          ...decisionPath.map((step) => Padding(
-            padding: const EdgeInsets.only(bottom: 4),
-            child: Row(
-              children: [
-                const Icon(Icons.arrow_right, size: 16, color: Colors.blue),
-                Expanded(child: Text(step, style: const TextStyle(fontSize: 11, fontFamily: 'monospace'))),
-              ],
-            ),
-          )),
-        ],
-      ),
-    );
-  }
-
-  // визуал дерева
-  void _generateTreeVisual() {
-    String buffer = "";
-    void walk(DecisionNode node, String indent) {
-      if (node.isLeaf) {
-        buffer += "$indent└── () ${node.result}\n";
-        return;
-      }
-      buffer += "$indent? ${node.feature}\n";
-      node.children?.forEach((val, child) {
-        buffer += "$indent  ├─ '$val':\n";
-        walk(child, "$indent  │  ");
-      });
-    }
-    if (root != null) walk(root!, "");
-    setState(() => treeStructure = buffer);
-  }
-// парсим csv и заполняем словари
-  void _buildTree() {
-    List<String> lines = _rawTrainingData.trim().split('\n');
-    List<String> headers = lines[0].split(',');
-    List<Map<String, String>> data = [];
-    for (int i = 1; i < lines.length; i++) {
-      var vals = lines[i].split(',');
-      Map<String, String> row = {};
-      for (int j = 0; j < headers.length; j++) {
-        String key = headers[j].trim();
-        String value = vals[j].trim();
-        row[key] = value;
-      }
-      data.add(row);
-    }
-    root = _calculateID3(data, headers.sublist(0, headers.length - 1));
-  }
-  //сама функция
-  DecisionNode _calculateID3(List<Map<String, String>> data, List<String> features) {
-    Set<String> uniqueResults = {};
-    for (int i = 0; i < data.length; i++) {
-      String place = data[i]['recommended_place']!;
-      uniqueResults.add(place);
-    }
-
-    if (uniqueResults.length == 1) {
-      return DecisionNode(result: uniqueResults.first);
-    }
-    if (features.isEmpty) {
-      return DecisionNode(result: "Не определено");
-    }
-
-    String bestFeat = _getBestFeature(data, features);
-
-    Map<String, DecisionNode> branches = {};
-
-    Set<String> possibleValues = {};
-    for (int i = 0; i < data.length; i++) {
-      String value = data[i][bestFeat]!;
-      possibleValues.add(value);
-    }
-
-    for (String val in possibleValues) {
-
-      List<Map<String, String>> subset = [];
-      for (int i = 0; i < data.length; i++) {
-        if (data[i][bestFeat] == val) {
-          subset.add(data[i]);
-        }
-      }
-
-      if (subset.isEmpty) continue;
-
-      List<String> remainingFeatures = [];
-      for (int i = 0; i < features.length; i++) {
-        if (features[i] != bestFeat) {
-          remainingFeatures.add(features[i]);
-        }
-      }
-      DecisionNode nextNode = _calculateID3(subset, remainingFeatures);
-      branches[val] = nextNode;
-    }
-    return DecisionNode(feature: bestFeat, children: branches);
   }
 }

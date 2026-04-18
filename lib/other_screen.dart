@@ -17,8 +17,7 @@ const List<MapPoint> mapPoints = [
   MapPoint(name: "Каменные бабы (слева)", x: 298, y: 232),
   MapPoint(name: "Каменные бабы (справа)", x: 296, y: 167),
   MapPoint(name: "Главный корпус ТГУ", x: 289, y: 201),
-  MapPoint(name: "Мостик через медичку", x: 320, y: 81),
-  MapPoint(name: "Памятник крылову и Сергиевской", x: 232, y: 127) //координаты неизвестны
+  MapPoint(name: "Профессор Белкин", x: 293, y: 185)
 ];
 
 

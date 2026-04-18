@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:tsu_app/search_coworkings.dart';
 import 'map_data_HD.dart';
 import 'path.dart';
 import 'other_screen.dart';
@@ -7,7 +8,7 @@ import 'cafe_data.dart';
 import 'drow_points.dart';
 import 'ant_algoritm.dart';
 
-enum AppMode { A, clustering }
+enum AppMode { A, clustering, Ant }
 void main() => runApp(const TSUApp());
 
 class TSUApp extends StatelessWidget {
@@ -29,7 +30,11 @@ class MainNavigation extends StatefulWidget {
 
 class _MainNavigationState extends State<MainNavigation> {
   int IndexPage = 0;
+  int groupSize = 0;
+  AppMode currentMode = AppMode.Ant;
+  MapPoint? startPoint;
   List<Offset> pathPoints = [];
+  List<Offset> pathPointsAnt = [];
   final List<MapPoint> _selectedPoints = [];
   
   void _handleUpdate() {
@@ -60,15 +65,54 @@ class _MainNavigationState extends State<MainNavigation> {
     });
   }
 
+  void buildOptimizedRouteForGroup() {
+    if (startPoint == null) return;
+
+    setState(() {
+      List<Coworkings> selectedCoworkings = CoworkingSolver.solveStudentDistribution(
+        coworkings,
+        groupSize,
+      );
+
+      List<MapPoint> optimizedPoints = selectedCoworkings.map((c) =>
+          MapPoint(name: c.name, x: c.x, y: c.y)
+      ).toList();
+
+      optimizedPoints.insert(0, startPoint!);
+
+      List<Offset> fullPath = [];
+      for (int i = 0; i < optimizedPoints.length - 1; i++) {
+        var segment = AStarSolver.findPath(
+          optimizedPoints[i].x, optimizedPoints[i].y,
+          optimizedPoints[i + 1].x, optimizedPoints[i + 1].y,
+        );
+
+        fullPath.addAll(segment.map((p) => Offset(
+          (p.dx / RoshaMap.width) * 320,
+          (p.dy / RoshaMap.height) * 240,
+        )));
+      }
+
+      this.pathPoints = fullPath;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final List<Widget> screen = [
-      NavigationScreen(selectedPoints: _selectedPoints, pathPoints: pathPoints),
-      const FoodScreen(), // ← вернули FoodScreen
+      NavigationScreen(selectedPoints: _selectedPoints, pathPoints: pathPoints, groupSize: groupSize),
+      const FoodScreen(),
       OtherScreen(
         selectedPoints: _selectedPoints,
         onChanged: _handleUpdate,
         buildOptimizedRoute: _buildOptimizedRoute,
+        onGroupSizeSelected: (int students) {
+          setState(() {
+            groupSize = students;
+            currentMode = AppMode.Ant;
+            IndexPage = 0;
+          });
+        }
       ),
     ];
     return Scaffold(
@@ -387,7 +431,13 @@ class _FoodScreenState extends State<FoodScreen> {
 class NavigationScreen extends StatefulWidget {
   final List<MapPoint> selectedPoints;
   final List<Offset> pathPoints;
-  const NavigationScreen({super.key, required this.selectedPoints, required this.pathPoints});
+  final int groupSize;
+  const NavigationScreen({
+    super.key,
+    required this.selectedPoints,
+    required this.pathPoints,
+    required this.groupSize,
+  });
   @override
   State<NavigationScreen> createState() => _NavigationScreenState();
 }
@@ -399,6 +449,10 @@ class _NavigationScreenState extends State<NavigationScreen> {
   List<Offset> pathPoints = [];
   final int gridW = RoshaMap.width;
   final int gridH = RoshaMap.height;
+
+  MapPoint? startPoint;
+  List<Coworkings> routeCoworkings = [];
+  List<Offset> routeOffsets = [];
 
   int? startGridX;
   int? startGridY;
@@ -506,6 +560,27 @@ class _NavigationScreenState extends State<NavigationScreen> {
           const SnackBar(content: Text("Это не дорога")),
         );
       }
+    }
+    else if(currentMode == AppMode.Ant) {
+      int mapX = (x / mapSize.width * gridW).floor();
+      int mapY = (y / mapSize.height * gridH).floor();
+
+      if (mapX < 0 || mapX >= gridW || mapY < 0 || mapY >= gridH || RoshaMap.grid[mapY * gridW + mapX] != 0){
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Это не дорога")),
+        );
+        return;
+      }
+      setState((){
+        startPoint = MapPoint(
+          name: "Старт",
+          x: mapX,
+          y: mapY,
+        );
+        print("StartPoint: ${startPoint!.x}, ${startPoint!.y}");
+        final mainnav = _MainNavigationState();
+        mainnav.buildOptimizedRouteForGroup();
+      });
     }
     else {
       if (x < 0 || x > mapSize.width || y < 0 || y > mapSize.height) return;

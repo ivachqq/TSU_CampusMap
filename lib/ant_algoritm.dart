@@ -9,6 +9,7 @@ class Ant {
   List<int> path = [];
   Set<int> unvisited = {};
   double totalDistance = 0;
+  int students = 0;
 
   Ant(this.numPoints, int startNode) {
     path.add(startNode);
@@ -25,8 +26,8 @@ class Ant {
 }
 
 class AntSolver{
-  static const double alpha = 1.0;
-  static const double beta = 2.0;
+  static const double alpha = 1.0; //жадность к феромонам
+  static const double beta = 2.0; //жадность к пути
   static const double evaporation = 0.5;
   static const double Q = 100.0;
   static const int iterations = 100;

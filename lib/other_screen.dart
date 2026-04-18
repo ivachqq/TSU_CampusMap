@@ -16,23 +16,29 @@ const List<MapPoint> mapPoints = [
   MapPoint(name: "Геофизический центр Евразии", x: 349, y: 200),
   MapPoint(name: "Каменные бабы (слева)", x: 298, y: 232),
   MapPoint(name: "Каменные бабы (справа)", x: 296, y: 167),
-  MapPoint(name: "Главный корпус ТГУ", x: 289, y: 201),
-  MapPoint(name: "Мостик через медичку", x: 320, y: 81),
-  MapPoint(name: "Памятник крылову и Сергиевской", x: 232, y: 127) //координаты неизвестны
+  MapPoint(name: "Главный корпус ТГУ", x: 289, y: 201)
 ];
-
 
 class OtherScreen extends StatefulWidget {
   final List<MapPoint> selectedPoints;
   final VoidCallback onChanged;
   final VoidCallback buildOptimizedRoute;
-  const OtherScreen({super.key, required this.selectedPoints, required this.onChanged, required this.buildOptimizedRoute});
+  final void Function(int students)? onGroupSizeSelected;
+
+  const OtherScreen({
+    super.key,
+    required this.selectedPoints,
+    required this.onChanged,
+    required this.buildOptimizedRoute,
+    this.onGroupSizeSelected,
+  });
 
   @override
   State<OtherScreen> createState() => _OtherScreenState();
 }
 
 class _OtherScreenState extends State<OtherScreen>{
+  final TextEditingController _studentsController = TextEditingController();
 
   @override
   Widget build(BuildContext context) {
@@ -40,7 +46,8 @@ class _OtherScreenState extends State<OtherScreen>{
       children: [
         ExpansionTile(
           title: Text("Достопримечательности"),
-          children: mapPoints.map((point) {
+          children: [
+            ...mapPoints.map((point) {
             return CheckboxListTile(
               title: Text(point.name),
               value: widget.selectedPoints.contains(point),
@@ -56,13 +63,46 @@ class _OtherScreenState extends State<OtherScreen>{
               },
             );
           }).toList(),
+          Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: ElevatedButton(
+              onPressed: widget.selectedPoints.length > 1 ? () {
+                widget.buildOptimizedRoute();
+              }: null,
+              child: Text("Построить маршрут"),
+            ),
+          ),
+        ],
         ),
-        ElevatedButton(
-          onPressed: widget.selectedPoints.length > 1 ? () {
-            widget.buildOptimizedRoute();
-          }: null,
-          child: Text("Построить маршрут"),
-        )
+        ExpansionTile(
+          title: Text("Найти коворкинг"),
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: TextField(
+                controller: _studentsController,
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(
+                  labelText: "Количество студентов",
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ),
+
+            Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: ElevatedButton(
+                onPressed: () {
+                  int students = int.tryParse(_studentsController.text) ?? 0;
+                  if (students > 0) {
+                    widget.onGroupSizeSelected?.call(students);
+                  }
+                },
+                child: Text("Поставить стартовую точку и найти коворкинг"),
+              ),
+            ),
+          ],
+        ),
       ],
     );
   }
